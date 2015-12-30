@@ -38,20 +38,56 @@ nhl.data.prep<-function(df) {
   return(df)
 }
 
-OT.Stats<-function(df) {
-    stats<-data.frame("Team"=unique(clean.data$AwayTeam), "Appearances"=rep(0), "Wins"=rep(0))
+make.stats.table<-function(df) {
+    stats<-data.frame("Team"=unique(df$AwayTeam),"GP"=rep(0),"W"=rep(0),"L"=rep(0),"OTL"=rep(0),"P"=rep(0),"ROW"=rep(0),"GF"=rep(0),"GA"=rep(0),"DIFF"=rep(0), "Win.Percent"=rep(0), "OT.SO.Appear"=rep(0), "OT.SO.Win"=rep(0), "OT.Win.Percent"=rep(0))
     for (i in 1:nrow(df)) {
-        if (df[i,"OT.Win"]=="V") {
-            stats[stats$Team %in% df[i,"AwayTeam"],]$Appearances<-stats[stats$Team %in% df[i,"AwayTeam"],]$Appearances + 1
-            stats[stats$Team %in% df[i,"HomeTeam"],]$Appearances<-stats[stats$Team %in% df[i,"HomeTeam"],]$Appearances + 1
-            stats[stats$Team %in% df[i,"AwayTeam"],]$Wins<-stats[stats$Team %in% df[i,"AwayTeam"],]$Wins + 1
-        }  
-        else if (df[i,"OT.Win"]=="H") {
-            stats[stats$Team %in% df[i,"AwayTeam"],]$Appearances<-stats[stats$Team %in% df[i,"AwayTeam"],]$Appearances + 1
-            stats[stats$Team %in% df[i,"HomeTeam"],]$Appearances<-stats[stats$Team %in% df[i,"HomeTeam"],]$Appearances + 1
-            stats[stats$Team %in% df[i,"HomeTeam"],]$Wins<-stats[stats$Team %in% df[i,"HomeTeam"],]$Wins + 1
+        if (!is.na(df[i,"AG"]) | !is.na(df[i,"HG"])){
+            if (df[i,"OT.Win"]=="V") {
+                stats[stats$Team %in% df[i,"AwayTeam"],]$W<-stats[stats$Team %in% df[i,"AwayTeam"],]$W + 1
+                stats[stats$Team %in% df[i,"HomeTeam"],]$OTL<-stats[stats$Team %in% df[i,"HomeTeam"],]$OTL + 1
+                if (df[i,"OT.SO"]=="OT"){
+                    stats[stats$Team %in% df[i,"AwayTeam"],]$ROW<-stats[stats$Team %in% df[i,"AwayTeam"],]$ROW + 1
+                }
+                stats[stats$Team %in% df[i,"AwayTeam"],]$OT.SO.Appear<-stats[stats$Team %in% df[i,"AwayTeam"],]$OT.SO.Appear + 1
+                stats[stats$Team %in% df[i,"HomeTeam"],]$OT.SO.Appear<-stats[stats$Team %in% df[i,"HomeTeam"],]$OT.SO.Appear + 1
+                stats[stats$Team %in% df[i,"AwayTeam"],]$OT.SO.Win<-stats[stats$Team %in% df[i,"AwayTeam"],]$OT.SO.Win + 1
+            }  
+            else if (df[i,"OT.Win"]=="H") {
+                stats[stats$Team %in% df[i,"AwayTeam"],]$OTL<-stats[stats$Team %in% df[i,"AwayTeam"],]$OTL + 1
+                stats[stats$Team %in% df[i,"HomeTeam"],]$W<-stats[stats$Team %in% df[i,"HomeTeam"],]$W + 1
+                if (df[i,"OT.SO"]=="OT"){
+                    stats[stats$Team %in% df[i,"HomeTeam"],]$ROW<-stats[stats$Team %in% df[i,"HomeTeam"],]$ROW + 1
+                }
+                stats[stats$Team %in% df[i,"AwayTeam"],]$OT.SO.Appear<-stats[stats$Team %in% df[i,"AwayTeam"],]$OT.SO.Appear + 1
+                stats[stats$Team %in% df[i,"HomeTeam"],]$OT.SO.Appear<-stats[stats$Team %in% df[i,"HomeTeam"],]$OT.SO.Appear + 1
+                stats[stats$Team %in% df[i,"HomeTeam"],]$OT.SO.Win<-stats[stats$Team %in% df[i,"HomeTeam"],]$OT.SO.Win + 1
+            }
+            else
+                if (df[i,"AG"]>df[i,"HG"]) {
+                    stats[stats$Team %in% df[i,"AwayTeam"],]$W<-stats[stats$Team %in% df[i,"AwayTeam"],]$W + 1
+                    stats[stats$Team %in% df[i,"AwayTeam"],]$ROW<-stats[stats$Team %in% df[i,"AwayTeam"],]$ROW + 1
+                    stats[stats$Team %in% df[i,"HomeTeam"],]$L<-stats[stats$Team %in% df[i,"HomeTeam"],]$L + 1
+                }
+                else {
+                    stats[stats$Team %in% df[i,"AwayTeam"],]$L<-stats[stats$Team %in% df[i,"AwayTeam"],]$L + 1
+                    stats[stats$Team %in% df[i,"HomeTeam"],]$ROW<-stats[stats$Team %in% df[i,"HomeTeam"],]$ROW + 1
+                    stats[stats$Team %in% df[i,"HomeTeam"],]$W<-stats[stats$Team %in% df[i,"HomeTeam"],]$W + 1
+                }
+            
+            stats[stats$Team %in% df[i,"AwayTeam"],]$GF<-stats[stats$Team %in% df[i,"AwayTeam"],]$GF + df[i,"AG"]
+            stats[stats$Team %in% df[i,"AwayTeam"],]$GA<-stats[stats$Team %in% df[i,"AwayTeam"],]$GA + df[i,"HG"]
+            stats[stats$Team %in% df[i,"HomeTeam"],]$GA<-stats[stats$Team %in% df[i,"HomeTeam"],]$GA + df[i,"AG"]
+            stats[stats$Team %in% df[i,"HomeTeam"],]$GF<-stats[stats$Team %in% df[i,"HomeTeam"],]$GF + df[i,"HG"]
+            stats[stats$Team %in% df[i,"AwayTeam"],]$GP<-stats[stats$Team %in% df[i,"AwayTeam"],]$GP + 1
+            stats[stats$Team %in% df[i,"HomeTeam"],]$GP<-stats[stats$Team %in% df[i,"HomeTeam"],]$GP + 1
         }
     }
-    stats$Win.Percent<-stats$Wins/stats$Appearances
+    stats$P<-2*stats$W+stats$OTL
+    stats$DIFF<-stats$GF-stats$GA
+    stats$Win.Percent<-stats$W/stats$GP
+    stats$OT.Win.Percent<-stats$OT.SO.Win/stats$OT.SO.Appear
+    
+    stats<-stats[order(-stats$P, -stats$ROW, -stats$DIFF),]
+    
     return(stats)
 }
