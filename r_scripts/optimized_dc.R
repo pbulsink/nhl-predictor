@@ -1,9 +1,7 @@
 # This is the Dixon Coles method of score prediction from 
 # http://opisthokonta.net/?p=890 & ff. 
 
-
-
-tau <- Vectorize(function(xx, yy, lambda, mu, rho){
+tau.opt <- Vectorize(function(xx, yy, lambda, mu, rho){
     if (xx == 0 & yy == 0){return(1 - (lambda*mu*rho))
     } else if (xx == 0 & yy == 1){return(1 + (lambda*rho))
     } else if (xx == 1 & yy == 0){return(1 + (mu*rho))
@@ -11,14 +9,14 @@ tau <- Vectorize(function(xx, yy, lambda, mu, rho){
     } else {return(1)}
 })
 
-DClogLik <- function(y1, y2, lambda, mu, rho=0){
+DClogLik.opt <- function(y1, y2, lambda, mu, rho=0){
     #rho=0, independence
     #y1: home goals
     #y2: away goals
-    sum(log(tau(y1, y2, lambda, mu, rho)) + log(dpois(y1, lambda)) + log(dpois(y2, mu)))
+    sum(log(tau.opt(y1, y2, lambda, mu, rho)) + log(dpois(y1, lambda)) + log(dpois(y2, mu)))
 }
 
-DCmodelData <- function(df){
+DCmodelData.opt <- function(df){
     
     team.names <- unique(c(levels(df$HomeTeam), levels(df$AwayTeam)))
     
@@ -39,11 +37,11 @@ DCmodelData <- function(df){
     
     return(list(homeTeamDMa=hm.a, homeTeamDMd=hm.d,
                 awayTeamDMa=am.a, awayTeamDMd=am.d,
-                homeGoals=df$FTHG, awayGoals=df$FTAG,
+                homeGoals=df$HG, awayGoals=df$AG,
                 teams=team.names)) 
 }
 
-DCoptimFn <- function(params, DCm){
+DCoptimFn.opt <- function(params, DCm){
     
     home.p <- params[1]
     rho.p <- params[2]
@@ -56,15 +54,14 @@ DCoptimFn <- function(params, DCm){
     lambda <- exp(DCm$homeTeamDMa %*% attack.p + DCm$awayTeamDMd %*% defence.p + home.p)
     mu <- exp(DCm$awayTeamDMa %*% attack.p + DCm$homeTeamDMd %*% defence.p)
     
-    
     return(
-        DClogLik(y1=DCm$homeGoals, y2=DCm$awayGoals, lambda, mu, rho.p) * -1
+        DClogLik.opt(y1=DCm$homeGoals, y2=DCm$awayGoals, lambda, mu, rho.p) * -1
     )
 }
 
-do.Dixon.Coles.prediction<-function(df){
+do.Dixon.Coles.prediction.opt<-function(df){
     #Get a useful data set
-    dcm<-DCmodelData(df)
+    dcm<-DCmodelData.opt(df)
     nteams <- length(dcm$teams)
     
     #dummy fill parameters
@@ -83,13 +80,13 @@ do.Dixon.Coles.prediction<-function(df){
     
     
     print("Starting model fitting")
-    res <- optim(par=par.inits, fn=DCoptimFn, DCm=dcm, method='BFGS')
+    res <- optim(par=par.inits, fn=DCoptimFn.opt, DCm=dcm, method='BFGS')
     
     print(res$par)
     
     parameters <- res$par
     
-    #compute Wolves attack parameter
+    #compute last team attack parameter
     missing.attack <- sum(parameters[3:(nteams+1)]) * -1
     
     #put it in the parameters vector
@@ -107,7 +104,7 @@ do.Dixon.Coles.prediction<-function(df){
     
 }
 
-predict.result<-function(res,home,away,maxgoal=12){
+predict.result.opt<-function(res,home,away,maxgoal=12){
     attack.home<-paste("Attack",home,sep=".")
     attack.away<-paste("Attack",away,sep=".")
     defence.home<-paste("Defence",home,sep=".")
@@ -120,7 +117,7 @@ predict.result<-function(res,home,away,maxgoal=12){
     
     probability_matrix <- dpois(0:maxgoal, lambda) %*% t(dpois(0:maxgoal, mu))
     
-    scaling_matrix <- matrix(tau(c(0,1,0,1), c(0,0,1,1), lambda, mu, res$par['RHO']), nrow=2)
+    scaling_matrix <- matrix(tau.opt(c(0,1,0,1), c(0,0,1,1), lambda, mu, res$par['RHO']), nrow=2)
     probability_matrix[1:2, 1:2] <- probability_matrix[1:2, 1:2] * scaling_matrix
     
     HomeWinProbability <- sum(probability_matrix[lower.tri(probability_matrix)])
