@@ -29,6 +29,7 @@ ot.fixer<-function(row) {
 
 nhl.data.prep<-function(df) {
   df<-df[,c('Date','Visitor','G','Home','G.1','X')]
+  df<-df[!is.na(df$G),]
   df$OT.Win<-apply(df,1,ot.tagger)
   scores<-do.call("rbind",apply(df,1,ot.fixer))
   df$G<-scores$G
