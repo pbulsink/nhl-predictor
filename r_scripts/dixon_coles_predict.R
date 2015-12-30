@@ -76,6 +76,7 @@ do.Dixon.Coles.prediction<-function(df){
   res <- auglag(par=par.inits, fn=DCoptimFn, heq=DCattackConstr, DCm=dcm)
   
   print(res$par)
+  return(res)
   
 }
 
