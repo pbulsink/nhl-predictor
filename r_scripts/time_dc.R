@@ -41,7 +41,7 @@ DCmodelData.time <- function(df){
         awayTeamDM=am,
         homeGoals=df$HG,
         awayGoals=df$AG,
-        teams=team.names
+        teams=team.names,
         dates=df$Date
     )) 
 }
@@ -50,12 +50,11 @@ DCoptimFn.time <- function(params, DCm, xi=0){
     
     home.p <- params[1]
     rho.p <- params[2]
-    xi <- params[3]
     
     nteams <- length(DCm$teams)
     ndates <- length(DCm$dates)
-    attack.p <- matrix(params[4:(nteams+3)], ncol=1)
-    defence.p <- matrix(params[(nteams+4):length(params)], ncol=1)
+    attack.p <- matrix(params[3:(nteams+2)], ncol=1)
+    defence.p <- matrix(params[(nteams+3):length(params)], ncol=1)
     
     lambda <- exp(DCm$homeTeamDM %*% attack.p + DCm$awayTeamDM %*% defence.p + home.p)
     mu <- exp(DCm$awayTeamDM %*% attack.p + DCm$homeTeamDM %*% defence.p)
@@ -68,7 +67,7 @@ DCoptimFn.time <- function(params, DCm, xi=0){
 
 DCattackConstr.time <- function(params, DCm, ...){
     nteams <- length(DCm$teams)
-    attack.p <- matrix(params[4:(nteams+3)], ncol=1)
+    attack.p <- matrix(params[3:(nteams+2)], ncol=1)
     return((sum(attack.p) / nteams) - 1)
 }
 
@@ -81,13 +80,12 @@ do.DC.predict.time<-function(df, xi=0){
     defence.params <- rep(-0.08, times=nlevels(df$HomeTeam))
     home.param <- 0.06
     rho.init <- 0.03
-    xi.init <- xi
     par.inits <- c(home.param, rho.init, attack.params, defence.params)
     #it is also usefull to give the parameters some informative names
-    names(par.inits) <- c('HOME', 'RHO', 'XI', paste('Attack', dcm$teams, sep='.'), paste('Defence', dcm$teams, sep='.'))
+    names(par.inits) <- c('HOME', 'RHO', paste('Attack', dcm$teams, sep='.'), paste('Defence', dcm$teams, sep='.'))
     print(par.inits)
     print("Building Model")
-    res <- auglag(par=par.inits, fn=DCoptimFn.time, heq=DCattackConstr, DCm=dcm)
+    res <- auglag(par=par.inits, fn=DCoptimFn.time, heq=DCattackConstr, DCm=dcm, xi=xi)
     
     print(res$par)
     return(res)
