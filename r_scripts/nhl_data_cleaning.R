@@ -40,9 +40,11 @@ nhl.data.prep<-function(df) {
 }
 
 nhl.to.play<-function(df){
-    df<-df[,c('Date','Visitor','G','Home','G.1','X')]
+    df<-df[,c('Date','Visitor','G','Home','G.1')]
     df$Date<-as.Date(df$Date)
-    df<-df[!(df$date < Sys.Date()),]
+    df<-df[!(df$Date < Sys.Date()),]
+    df$OT.SO<-""
+    df$OT.Win<-""
     colnames(df)<-c("Date", "AwayTeam","AG","HomeTeam","HG","OT.SO","OT.Win")
     return(df)
 }
@@ -161,7 +163,7 @@ standings_alt<-function(df){
                           P = 0,
                           HomeFor = 0, HomeAgainst = 0,
                           AwayFor = 0, AwayAgainst = 0,
-                          GF = 0, GA = 0, DIFF = 0, PP=0)
+                          GF = 0, GA = 0, DIFF = 0, PP=0, OT.Win.Percent=0)
     
     # Games Played
     tmpTable$HomeGames = as.numeric(table(df$HomeTeam))
@@ -201,17 +203,32 @@ standings_alt<-function(df){
     tmpTable$AwayAgainst = as.numeric(tapply(df$HG, df$AwayTeam, sum, na.rm = TRUE)) + tmpTable$AwayOTL
     
     
-    tmpTable$GF =ifelse(is.na(tmpTable$HomeFor), 0, tmpTable$HomeFor) + ifelse(is.na(tmpTable$AwayFor), 0, tmpTable$AwayFor)
+    tmpTable$GF = ifelse(is.na(tmpTable$HomeFor), 0, tmpTable$HomeFor) + ifelse(is.na(tmpTable$AwayFor), 0, tmpTable$AwayFor)
     tmpTable$GA = ifelse(is.na(tmpTable$HomeAgainst), 0, tmpTable$HomeAgainst) + ifelse(is.na(tmpTable$AwayAgainst), 0, tmpTable$AwayAgainst)
     
     tmpTable$DIFF = tmpTable$GF - tmpTable$GA
     
+    #Additional Stats
     tmpTable$P = 2 * tmpTable$W + tmpTable$OTL
     tmpTable$PP = tmpTable$P/tmpTable$GP
-    tmpTable<-tmpTable[,c("Team","GP", "W", "OTL", "L", "ROW", "P", "GF", "GA", "DIFF", "PP")]
+    tmpTable$OT.Win.Percent = (tmpTable$HomeOTW + tmpTable$HomeSOW + tmpTable$AwayOTW + tmpTable$AwaySOW)/(tmpTable$HomeOTW + tmpTable$HomeSOW + tmpTable$AwayOTW + tmpTable$AwayOTL + tmpTable$OTL)
+    tmpTable<-tmpTable[,c("Team","GP", "W", "OTL", "L", "ROW", "P", "GF", "GA", "DIFF", "PP", "OT.Win.Percent")]
     
     return(tmpTable[order(-tmpTable$P, -tmpTable$PP, -tmpTable$ROW, -tmpTable$DIFF),])
     #return(tmpTable)
+}
+
+get_and_prep_all_data<-function(yearlist=c(2009,2010,2011,2012,2013,2014,2015,2016)){
+    df<-data.frame(Date=NULL, Visitor=NULL, G=NULL, Home=NULL, G.1=NULL, X=NULL)
+    for (year in 1:length(yearlist)){
+        df<-rbind(df, read.csv(paste('./practice_data/leagues_NHL_',yearlist[year],'_games_games.csv', sep=''))[c("Date", "Visitor", "G", "Home", "G.1", "X")])
+    }
+    df[df$Home == "Phoenix Coyotes",]$Home <- "Arizona Coyotes"
+    df[df$Visitor == "Phoenix Coyotes",]$Visitor <- "Arizona Coyotes"
+    df[df$Home == "Atlanta Thrashers",]$Home <- "Winnipeg Jets"
+    df[df$Visitor == "Atlanta Thrashers",]$Visitor <- "Winnipeg Jets"
+    df<-droplevels(df)
+    return(df)
 }
 
 
