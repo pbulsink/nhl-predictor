@@ -8,7 +8,7 @@ log5.OT.predictor<-function(stats, home, away){
     return(log5)
 }
 
-build_score_matrix<-function(res, home, away, m=NULL, maxgoal=10){
+build_score_matrix<-function(res, home, away, m=NULL, maxgoal=7){
     if (!is.null(m)){
         # Expected goals home
         lambda <- predict(m, data.frame(Home=1, Team=home, Opponent=away), type='response')
@@ -70,6 +70,10 @@ predict_one_game<-function(pmatrix,stats,home,away){
     return(score)
 }
 
+predict_score<-function(res, stats, home, away, m=NULL, maxgoal=7){
+    return(predict_one_game(build_score_matrix(res, home, away, m=m, maxgoal=maxgoal), stats=stats, home, away))
+}
+
 predict_one_game_often<-function(pmatrix, stats, home, away, npredictions = 1000){
     scorelist<-data.frame("HG" = rep(0), "AG" = rep(0), "OT.SO" = rep(NA))
     for (i in 1:npredictions){
@@ -83,4 +87,31 @@ predict_one_game_often<-function(pmatrix, stats, home, away, npredictions = 1000
     scorelist$AG<-as.integer(scorelist$AG)
     scorelist$OT.SO<-as.factor(scorelist$OT.SO)
     return(scorelist)
+}
+
+
+predict_remainder_of_season<-function(res, sched, stats, m=NULL, maxgoal=7){
+    for (game in 1:nrow(sched)){
+        home<-as.character(sched[game, "HomeTeam"])
+        away<-as.character(sched[game, "AwayTeam"])
+        score<-predict_score(res, stats, home, away, m=m, maxgoal = maxgoal)
+        if (!is.na(score[3])){
+            sched[game,"OT.SO"]<-score[3]
+            if(score[1]>score[2]){
+                sched[game, "HG"]<-score[2]
+                sched[game, "AG"]<-score[2]
+                sched[game, "OT.Win"]<-"H"
+            }
+            else{
+                sched[game, "HG"]<-score[1]
+                sched[game, "AG"]<-score[1]
+                sched[game, "OT.Win"]<-"V"
+            }
+        }
+        else{
+            sched[game, "HG"]<-score[1]
+            sched[game, "AG"]<-score[2]
+        }
+    }
+    return(sched)
 }
