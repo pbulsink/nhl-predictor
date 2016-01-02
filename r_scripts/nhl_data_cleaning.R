@@ -39,6 +39,14 @@ nhl.data.prep<-function(df) {
   return(df)
 }
 
+nhl.to.play<-function(df){
+    df<-df[,c('Date','Visitor','G','Home','G.1','X')]
+    df$Date<-as.Date(df$Date)
+    df<-df[!(df$date < Sys.Date()),]
+    colnames(df)<-c("Date", "AwayTeam","AG","HomeTeam","HG","OT.SO","OT.Win")
+    return(df)
+}
+
 make.stats.table<-function(df) {
     stats<-data.frame("Team"=unique(df$AwayTeam),"GP"=rep(0),"W"=rep(0),"L"=rep(0),"OTL"=rep(0),"P"=rep(0),"ROW"=rep(0),"GF"=rep(0),"GA"=rep(0),"DIFF"=rep(0), "Win.Percent"=rep(0), "OT.SO.Appear"=rep(0), "OT.SO.Win"=rep(0), "OT.Win.Percent"=rep(0))
     for (i in 1:nrow(df)) {
