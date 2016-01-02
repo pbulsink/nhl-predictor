@@ -104,7 +104,7 @@ do.Dixon.Coles.prediction.opt<-function(df){
     
 }
 
-predict.result.opt<-function(res,home,away,maxgoal=12){
+predict.result.opt<-function(res,home,away,maxgoal=7){
     attack.home<-paste("Attack",home,sep=".")
     attack.away<-paste("Attack",away,sep=".")
     defence.home<-paste("Defence",home,sep=".")

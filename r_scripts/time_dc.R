@@ -85,13 +85,13 @@ do.DC.predict.time<-function(df, xi=0){
     names(par.inits) <- c('HOME', 'RHO', paste('Attack', dcm$teams, sep='.'), paste('Defence', dcm$teams, sep='.'))
     print(par.inits)
     print("Building Model")
-    res <- auglag(par=par.inits, fn=DCoptimFn.time, heq=DCattackConstr, DCm=dcm, xi=xi)
+    res <- auglag(par=par.inits, fn=DCoptimFn.time, heq=DCattackConstr.time, DCm=dcm, xi=xi)
     
     print(res$par)
     return(res)
 }
 
-predict.result.time<-function(res,home,away,maxgoal=12){
+predict.result.time<-function(res,home,away,maxgoal=7){
     attack.home<-paste("Attack",home,sep=".")
     attack.away<-paste("Attack",away,sep=".")
     defence.home<-paste("Defence",home,sep=".")

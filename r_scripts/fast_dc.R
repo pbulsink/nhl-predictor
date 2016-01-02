@@ -23,7 +23,7 @@ do.Fast.DC<-function(m, df){
     return(res)
 }
 
-fast.DC.predict<-function(m,res,home,away,maxgoal=12){
+fast.DC.predict<-function(m,res,home,away,maxgoal=7){
     # Expected goals home
     lambda <- predict(m, data.frame(Home=1, Team=home, Opponent=away), type='response')
     
