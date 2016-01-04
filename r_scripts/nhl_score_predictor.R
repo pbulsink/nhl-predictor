@@ -79,9 +79,6 @@ predict_one_game_often<-function(pmatrix, stats, home, away, npredictions = 1000
     for (i in 1:npredictions){
         #score<-predict_one_game(pmatrix = pmatrix, stats = stats, home = home, away = away)
         scorelist[i,]<-predict_one_game(pmatrix = pmatrix, stats = stats, home = home, away = away)
-        #scorelist[i,1]<-score[1]
-        #scorelist[i,2]<-score[2]
-        #scorelist[i,3]<-score[3]
     }
     scorelist$HG<-as.integer(scorelist$HG)
     scorelist$AG<-as.integer(scorelist$AG)
@@ -113,5 +110,19 @@ predict_remainder_of_season<-function(res, sched, stats, m=NULL, maxgoal=7){
             sched[game, "AG"]<-score[2]
         }
     }
+    sched$HG<-as.integer(sched$HG)
+    sched$AG<-as.integer(sched$AG)
     return(sched)
+}
+
+simulate_season<-function(res, sched, stats, past, n=1000, m=NULL, maxgoal=7){
+    standings<-matrix(0, nrow=length(unique(nhl.this.year.stats$Team)), ncol=length(unique(nhl.this.year.stats$Team)))
+    rownames(standings)<-sort(unique(nhl.this.year.stats$Team))
+    colnames(standings)<-c(1:ncol(standings))
+    for (i in 1:n){
+        scores<-predict_remainder_of_season(res=res, sched=sched, stats=stats)
+        standing.table<-standings_alt(rbind(past, scores))
+        standings<-build_standings_table(stats=standing.table, standings=standings)
+    }
+    return(standings)
 }

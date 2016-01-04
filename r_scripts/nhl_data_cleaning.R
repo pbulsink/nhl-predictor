@@ -213,9 +213,25 @@ standings_alt<-function(df){
     tmpTable$PP = tmpTable$P/tmpTable$GP
     tmpTable$OT.Win.Percent = (tmpTable$HomeOTW + tmpTable$HomeSOW + tmpTable$AwayOTW + tmpTable$AwaySOW)/(tmpTable$HomeOTW + tmpTable$HomeSOW + tmpTable$AwayOTW + tmpTable$AwayOTL + tmpTable$OTL)
     tmpTable<-tmpTable[,c("Team","GP", "W", "OTL", "L", "ROW", "P", "GF", "GA", "DIFF", "PP", "OT.Win.Percent")]
+    tmpTable<-tmpTable[order(-tmpTable$P, -tmpTable$PP, -tmpTable$ROW, -tmpTable$DIFF),]
     
-    return(tmpTable[order(-tmpTable$P, -tmpTable$PP, -tmpTable$ROW, -tmpTable$DIFF),])
-    #return(tmpTable)
+    rownames(tmpTable)<-1:nrow(tmpTable)
+    
+    return(tmpTable)
+}
+
+build_standings_table<-function(stats, standings=NA){
+    if (is.na(standings)){
+        standings<-matrix(0, nrow=length(unique(stats$Team)), ncol=length(unique(stats$Team)))
+        rownames(standings)<-sort(unique(stats$Team))
+        colnames(standings)<-c(1:ncol(standings))
+    }
+    
+    
+    for(t in 1:nrow(standings)){
+        standings[stats[t, "Team"], t] <- standings[stats[t, "Team"], t]+1
+    }
+    return(standings)
 }
 
 get_and_prep_all_data<-function(yearlist=c(2009,2010,2011,2012,2013,2014,2015,2016)){
@@ -231,4 +247,38 @@ get_and_prep_all_data<-function(yearlist=c(2009,2010,2011,2012,2013,2014,2015,20
     return(df)
 }
 
+nhl_divisions<-list(
+    "Atlantic" = c("Boston Bruins","Buffalo Sabres","Detroit Red Wings","Florida Panthers","Montreal Canadiens","Ottawa Senators","Tampa Bay Lightning","Toronto Maple Leafs"),
+    "Metropolitan" = c("Washington Capitals", "New York Islanders", "New York Rangers", "New Jersey Devils", "Pittsburgh Penguins", "Philadelphia Flyers", "Carolina Hurricanes", "Columbus Blue Jackets"),
+    "Central" = c("Dallas Stars", "St. Louis Blues", "Chicago Blackhawks", "Minnesota Wild", "Nashville Predators", "Colorado Avalanche", "Winnipeg Jets"),
+    "Pacific" = c("Los Angeles Kings", "Arizona Coyotes", "Vancouver Canucks", "San Jose Sharks", "Anaheim Ducks", "Calgary Flames", "Edmonton Oilers")
+)
+
+nhl_conferences<-list(
+    "East" = c(unlist(nhl_divisions["Atlantic"]), unlist(nhl_divisions["Metropolitan"])),
+    "West" = c(unlist(nhl_divisions["Central"]), unlist(nhl_divisions["Pacific"]))
+)
+
+
+get_division_standings<-function(stats, division){
+    return(stats[stats$Team %in% unlist(nhl_divisions[division]),])
+}
+
+get_conference_standings<-function(stats, conference){
+    if (conference=="East"){
+        a<-get_division_standings(stats, "Atlantic")
+        b<-get_division_standings(stats, "Metropolitan")
+    }
+    else{
+        a<-get_division_standings(stats, "Central")
+        b<-get_division_standings(stats, "Pacific")
+    }
+    top6<-rbind(a[1:3], b[1:3])
+    top6<-top6[order(-top6$P, -top6$PP, -top6$ROW, -top6$DIFF),]
+    remainder<-rbind(a[4:nrow(a),], b[4:nrow(b),])
+    remainder<-remainder[order(-remainder$P, -remainder$PP, -remainder$ROW, -remainder$DIFF)]
+    
+    return(rbind(top6, remainder))
+
+}
 
