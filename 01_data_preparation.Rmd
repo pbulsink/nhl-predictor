@@ -1,0 +1,17 @@
+---
+title: "NHL Data Preparation"
+author: "Philip Bulsink"
+date: 
+output: html_document
+---
+
+Much work has been done on predicting winners of sports or games. Many different tools exist, including some that attempt to predict the score of games. Some are specific to a sport, such as the [WASP tool for cricket](https://en.wikipedia.org/wiki/WASP_(cricket_calculation_tool)), while others are simple and useful everywhere, like [the log5 technique](https://en.wikipedia.org/wiki/Log5). Some use advanced individual statistics to sum up probabilities ([see this pdf](http://statistics.ucla.edu/system/resources/BAhbBlsHOgZmSSJPMjAxMi8wNS8xNC8xNV8xM18xOF8zNTBfQV9QbGF5ZXJfQmFzZWRfQXBwcm9hY2hfdG9fQmFzZWJhbGxfU2ltdWxhdGlvbi5wZGYGOgZFVA/A%20Player%20Based%20Approach%20to%20Baseball%20Simulation.pdf)), and others use various statistical tools, such as Bayesian analysis.
+
+Recently, I've seen Poisson regression, and in particular work by [Dixon and Coles](http://www.math.ku.dk/~rolf/teaching/thesis/DixonColes.pdf) in 1997 applied to English Premier league results. This technique is based on predicting the number of goals each team scores independently, and thus calculating the Poisson distribution, which gives us the probability that it happens any number of times. We predict the scores by analyzing historical data, calculating each team's attack and defence ability. We also add in a 'home' advantage, because teams do better at home where the facility is familiar and the crowd is (usually) friendly. 
+
+Dixon and Coles modified the simple Poisson probability tables by improving predictions for low scoring games, and by adding an 'aging' factor to reduce the importance of old data relative to recent data. Last year's score isn't as informative as the scores from the last month.
+
+One can find this applied to soccer and other sports with a quick google search, but the application to hockey is less available. I will show an implementation of Dixon-Coles for NHL scores, and use the predicted values to simulate the remainder of the season, showing who has the best chances of winning the President's Trophy and of taking home the Stanley Cup.
+
+
+
