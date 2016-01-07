@@ -11,7 +11,15 @@ Recently, I've seen Poisson regression, and in particular work by [Dixon and Col
 
 Dixon and Coles modified the simple Poisson probability tables by improving predictions for low scoring games, and by adding an 'aging' factor to reduce the importance of old data relative to recent data. Last year's score isn't as informative as the scores from the last month.
 
-One can find this applied to soccer and other sports with a quick google search, but the application to hockey is less available. I will show an implementation of Dixon-Coles for NHL scores, and use the predicted values to simulate the remainder of the season, showing who has the best chances of winning the President's Trophy and of taking home the Stanley Cup.
+One can find this applied to soccer and other sports with a quick google search. In particular, I like the work of Jonas at [opisthokonta.com](http://opisthokonta.net/?p=890). However, application of this work to hockey is less widely available. I will show an implementation of Dixon-Coles for NHL scores, and use the predicted values to simulate the remainder of the season, showing who has the best chances of winning the President's Trophy and of taking home the Stanley Cup. 
+
+We'll start by getting historical stats from [Hockey-Reference.com](hockeyreference.com). You can go to the site and download the 'Schedule and Results' data as a CSV file. The website uses some javascript to mask the data, so we can't just download in R without a lot of work. That's not what I'm interested in.
+
+```{r}
+nhl2015<-read.csv('../data/leagues_NHL_2015_games_games.csv')
+str(nhl2015)
+```
+
 
 
 
