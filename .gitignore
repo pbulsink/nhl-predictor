@@ -76,3 +76,8 @@ lib/
 .Rproj.user
 
 *.RData
+
+*.rdb
+*.rdx
+__packages
+

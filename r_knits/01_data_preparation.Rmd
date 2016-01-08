@@ -11,15 +11,77 @@ Recently, I've seen Poisson regression, and in particular work by [Dixon and Col
 
 Dixon and Coles modified the simple Poisson probability tables by improving predictions for low scoring games, and by adding an 'aging' factor to reduce the importance of old data relative to recent data. Last year's score isn't as informative as the scores from the last month.
 
-One can find this applied to soccer and other sports with a quick google search. In particular, I like the work of Jonas at [opisthokonta.com](http://opisthokonta.net/?p=890). However, application of this work to hockey is less widely available. I will show an implementation of Dixon-Coles for NHL scores, and use the predicted values to simulate the remainder of the season, showing who has the best chances of winning the President's Trophy and of taking home the Stanley Cup. 
+One can find this applied to soccer and other sports with a quick google search. In particular, I like the work of Jonas at [opisthokonta.com](http://opisthokonta.net/?p=890). However, application of this work to hockey is less widely available. I will show an implementation of Dixon-Coles for NHL scores using the [R programming language](https://www.r-project.org/), and use the predicted values to simulate the remainder of the season, showing who has the best chances of winning the President's Trophy and of taking home the Stanley Cup. 
 
-We'll start by getting historical stats from [Hockey-Reference.com](hockeyreference.com). You can go to the site and download the 'Schedule and Results' data as a CSV file. The website uses some javascript to mask the data, so we can't just download in R without a lot of work. That's not what I'm interested in.
+We'll start by getting historical stats from [Hockey-Reference.com](hockeyreference.com). You can go to the site and download the 'Schedule and Results' data as a CSV file. The website uses some javascript to mask the data, so we can't just download in R without a lot of work. That's not what I'm interested in, so we'll start from reading in the data from the .csv file for the 2014-2015 season, and taking a quick look at it.
 
-```{r}
+```{r cache=TRUE}
 nhl2015<-read.csv('../data/leagues_NHL_2015_games_games.csv')
-str(nhl2015)
+head(nhl2015)
 ```
 
+There's a few things to note. There's a few extra columns that don't matter, like ```Notes```, ```Notes.1```, etc. In fact, we only need a few columns, so we'll drop the rest. Some seasons have games postponed, those games have no data, and will mess up our results, so we'll cancel those too. Finally, names like ```G``` and ```G.1``` aren't useful, so lets fix those. 
 
+```{r}
+nhl2015<-nhl2015[,c('Date','Visitor','G','Home','G.1','X')]
+nhl2015<-nhl2015[!is.na(nhl2015$G),]
+colnames(nhl2015)<-c("Date", "AwayTeam","AG","HomeTeam","HG","OT.SO")
+```
 
+Now, lets take a look at the data in some more detail.
 
+```{r}
+percent_ot_so<-as.numeric((table(nhl2015$OT.SO)[2]+table(nhl2015$OT.SO)[3])/nrow(nhl2015))
+percent_ot_so
+```
+
+So we see that we have `r percent_ot_so` percent of our games go to overtime or shootout in the 2014-2015 season. We caon do more interesting things, like show the goal distributions for home, away, and the 'win by' (or goal difference). We'll use `ggplot2` for nicer looking graphics than waht's available in base R, and the `cowplot`.
+
+```{r}
+#Add a column for goal difference in a temp df
+df<-nhl2015
+df$Goal.Diff<-df$AG-df$HG
+library(ggplot2)
+library(cowplot)
+plot_AG<-ggplot(df, aes(AG)) + ggtitle("Away Goals") + scale_x_continuous(breaks=seq(0,10,2)) + geom_histogram(bins=10, binwidth=1, origin=-0.5)
+plot_HG<-ggplot(df, aes(HG)) + ggtitle("Home Goals") + scale_x_continuous(breaks=seq(0,10,2)) + geom_histogram(bins=10, binwidth=1, origin=-0.5)
+plot_diff<-ggplot(df, aes(Goal.Diff)) + ggtitle("Goal Difference (+ve is Away Win)") + scale_x_continuous(breaks=seq(min(df$Goal.Diff)-1,max(df$Goal.Diff)+1,2)) + geom_histogram(bins=16, binwidth=1, origin=(min(df$Goal.Diff)-0.5))
+plot_grid(plot_AG, plot_HG, plot_diff, align='h')
+```
+
+Both home and away goals look Poisson! Here's what a Poisson curve looks for a similar set of random numbers with the same characteristics:
+```{r}
+ggplot(, aes(rpois(nrow(nhl2015)*10, median(nhl2015$AG)))) + ggtitle("Simulated Goals") + scale_x_continuous(breaks=seq(0,10,2)) + geom_histogram(bins=10, binwidth=1, origin=-0.5)
+```
+
+One thing to note with the goal difference plot is the lack of 0 goal difference (no ties have been allowed since 2005-2006 season), and the associated increase in goal differences of 1. Recall that the odds of a game ending in OT or SO is `r percent_ot_so`. When modelling games, you want to be able to see ties, because OT and SO games are allotted an extra point, and are included in tiebreaker stats. 
+
+One technique would be to score the OT/SO games as tied, then track who wins them, and how. The following functions will set us up for that:
+
+```{r}
+ot.tagger<-function(row) {
+  if (row['X'] != '') {
+    if(row['G']>row['G.1']) {
+      return("V")
+    }
+    else{
+      return("H")
+    }
+  }
+  else {
+    return("")
+  }
+}
+
+ot.fixer<-function(row) {
+  H<-as.integer(row['G.1'])
+  V<-as.integer(row['G'])
+  if(row['OT.Win']=='H') {
+    H<-H-1
+  }
+  else if (row['OT.Win']=='V') {
+    V<-V-1
+  }
+  return(data.frame('G.1'=H,'G'=V))
+}
+```
