@@ -35,34 +35,46 @@ percent_ot_so<-as.numeric((table(nhl2015$OT.SO)[2]+table(nhl2015$OT.SO)[3])/nrow
 percent_ot_so
 ```
 
-So we see that we have `r percent_ot_so` percent of our games go to overtime or shootout in the 2014-2015 season. We caon do more interesting things, like show the goal distributions for home, away, and the 'win by' (or goal difference). We'll use `ggplot2` for nicer looking graphics than waht's available in base R, and the `cowplot`.
+So we see that we have `r percent_ot_so` percent of our games go to overtime or shootout in the 2014-2015 season. We caon do more interesting things, like show the goal distributions for home, away, and the 'win by' (or goal difference). We'll use `ggplot2` for nicer looking graphics than what's available in base R, and the `cowplot`.
 
 ```{r}
-#Add a column for goal difference in a temp df
-df<-nhl2015
-df$Goal.Diff<-df$AG-df$HG
 library(ggplot2)
 library(cowplot)
-plot_AG<-ggplot(df, aes(AG)) + ggtitle("Away Goals") + scale_x_continuous(breaks=seq(0,10,2)) + geom_histogram(bins=10, binwidth=1, origin=-0.5)
-plot_HG<-ggplot(df, aes(HG)) + ggtitle("Home Goals") + scale_x_continuous(breaks=seq(0,10,2)) + geom_histogram(bins=10, binwidth=1, origin=-0.5)
-plot_diff<-ggplot(df, aes(Goal.Diff)) + ggtitle("Goal Difference (+ve is Away Win)") + scale_x_continuous(breaks=seq(min(df$Goal.Diff)-1,max(df$Goal.Diff)+1,2)) + geom_histogram(bins=16, binwidth=1, origin=(min(df$Goal.Diff)-0.5))
-plot_grid(plot_AG, plot_HG, plot_diff, align='h')
+plot_AG<-ggplot(nhl2015, aes(AG)) 
+plot_AG<-plot_AG + ggtitle("Away Goals")
+plot_AG<-plot_AG + scale_x_continuous(breaks=seq(0,10,2))
+plot_AG<-plot_AG + geom_bar(width=0.8)
+
+plot_HG<-ggplot(nhl2015, aes(HG)) 
+plot_HG<-plot_HG + ggtitle("Home Goals") 
+plot_HG<-plot_HG + scale_x_continuous(breaks=seq(0,10,2))
+plot_HG<-plot_HG + geom_bar(width=0.8)
+
+plot_diff<-ggplot(nhl2015, aes(AG-HG)) 
+plot_diff<-plot_diff + ggtitle("Goal Difference (+ve is Away Win)")
+plot_diff<-plot_diff + scale_x_continuous(breaks=seq(-8,8,2))
+plot_diff<-plot_diff + geom_bar(width=0.8)
+
+plot_grid(plot_AG, plot_HG, plot_diff, align='h', nrow=1, ncol=3)
 ```
 
 Both home and away goals look Poisson! Here's what a Poisson curve looks for a similar set of random numbers with the same characteristics:
-```{r}
-ggplot(, aes(rpois(nrow(nhl2015)*10, median(nhl2015$AG)))) + ggtitle("Simulated Goals") + scale_x_continuous(breaks=seq(0,10,2)) + geom_histogram(bins=10, binwidth=1, origin=-0.5)
+```{r echo=FALSE}
+sim_goal_dist<-ggplot(, aes(rpois(nrow(nhl2015)*10, median(nhl2015$AG)))) 
+sim_goal_dist<-sim_goal_dist + ggtitle("Simulated Goals")
+sim_goal_dist<-sim_goal_dist + geom_bar(width=0.8)
+sim_goal_dist
 ```
 
 One thing to note with the goal difference plot is the lack of 0 goal difference (no ties have been allowed since 2005-2006 season), and the associated increase in goal differences of 1. Recall that the odds of a game ending in OT or SO is `r percent_ot_so`. When modelling games, you want to be able to see ties, because OT and SO games are allotted an extra point, and are included in tiebreaker stats. 
 
-One technique would be to score the OT/SO games as tied, then track who wins them, and how. The following functions will set us up for that:
+So, one technique would be to score the OT/SO games as tied, then track who wins them, and how. The following functions will set us up for that. Both take a row as the input, and can be 'vectorized' by calling apply on them. 
 
 ```{r}
-ot.tagger<-function(row) {
-  if (row['X'] != '') {
-    if(row['G']>row['G.1']) {
-      return("V")
+otTagger<-function(row) {
+  if (row['OT.SO'] != '') {
+    if(row['AG']>row['HG']) {
+      return("A")
     }
     else{
       return("H")
@@ -73,15 +85,98 @@ ot.tagger<-function(row) {
   }
 }
 
-ot.fixer<-function(row) {
-  H<-as.integer(row['G.1'])
-  V<-as.integer(row['G'])
+otFixer<-function(row) {
+  H<-as.integer(row['HG'])
+  A<-as.integer(row['AG'])
   if(row['OT.Win']=='H') {
     H<-H-1
   }
-  else if (row['OT.Win']=='V') {
-    V<-V-1
+  else if (row['OT.Win']=='A') {
+    A<-A-1
   }
-  return(data.frame('G.1'=H,'G'=V))
+  return(data.frame('HG'=H,'AG'=A))
+}
+
+nhl2015$OT.Win<-apply(nhl2015,1,otTagger)
+scores<-do.call("rbind",apply(nhl2015,1,otFixer))
+nhl2015$AG<-scores$AG
+nhl2015$HG<-scores$HG
+nhl2015$Date<-as.Date(nhl2015$Date)
+```
+
+Now that we have the goals stored as they were at the end of regular time, lets look at the goal difference distribution again:
+
+```{r echo=FALSE}
+plot_diff<-ggplot(nhl2015, aes(AG-HG)) 
+plot_diff<-plot_diff + ggtitle("Goal Difference (+ve is Away Win)") 
+plot_diff<-plot_diff + scale_x_continuous(breaks=seq(-8,8,2))
+plot_diff<-plot_diff + geom_bar(width=0.8)
+plot_diff
+```
+
+That looks better, but the effect of tied games overrides the normal distribution. Maybe this is just a season effect? We can import past seasons as well, and look at thousands more games to find out what's removed by adding more data points.
+
+First, lets' make a function to handle the whole import and cleaning set. This just does what we did above:
+```{r}
+nhlDataPrep<-function(df) {
+  df<-df[,c('Date','Visitor','G','Home','G.1','X')]
+  colnames(df)<-c("Date", "AwayTeam","AG","HomeTeam","HG","OT.SO")
+  df<-df[!is.na(df$AG),]
+  df$OT.Win<-apply(df,1,otTagger)
+  scores<-do.call("rbind",apply(df,1,otFixer))
+  df$AG<-scores$AG
+  df$HG<-scores$HG
+  df$Date<-as.Date(df$Date)
+  return(df)
 }
 ```
+
+I'll pull from the 2005-2006 season forward, when they started the shootout until today.Again starting from downloaded csv files, we'll import each, and add them to one large dataframe  Now remember, in the last few years some teams have moved or changed names. The Phoenix Coyotes are now the Arizona Coyotes. The Mighty Ducks of Anaheim are now the Anaheim Ducks. The Atlanta Thrashers moved to Winnipeg and became the Jets. 
+
+```{r cache=TRUE}
+getAndPrepAllData<-function(yearlist=c(2006, 2007, 2008, 2009,2010,2011,2012,2013,2014,2015,2016)){
+    df<-data.frame(Date=NULL, Visitor=NULL, G=NULL, Home=NULL, G.1=NULL, X=NULL)
+    for (year in 1:length(yearlist)){
+        df<-rbind(df, read.csv(paste('../data/leagues_NHL_',yearlist[year],'_games_games.csv', sep=''))[c("Date", "Visitor", "G", "Home", "G.1", "X")])
+    }
+    df[df$Home == "Phoenix Coyotes",]$Home <- "Arizona Coyotes"
+    df[df$Visitor == "Phoenix Coyotes",]$Visitor <- "Arizona Coyotes"
+    df[df$Home == "Mighty Ducks of Anaheim",]$Home <- "Anaheim Ducks"
+    df[df$Visitor == "Mighty Ducks of Anaheim",]$Visitor <- "Anaheim Ducks"
+    df[df$Home == "Atlanta Thrashers",]$Home <- "Winnipeg Jets"
+    df[df$Visitor == "Atlanta Thrashers",]$Visitor <- "Winnipeg Jets"
+    df<-droplevels(df)
+    df<-nhlDataPrep(df)
+    return(df)
+}
+
+all_nhl<-getAndPrepAllData()
+
+```
+
+Let's look at that data:
+```{r}
+str(all_nhl)
+```
+
+And the goals chart (again):
+```{r echo=FALSE}
+plot_AG<-ggplot(all_nhl, aes(AG)) 
+plot_AG<-plot_AG + ggtitle("Away Goals")
+plot_AG<-plot_AG + scale_x_continuous(breaks=seq(0,10,2))
+plot_AG<-plot_AG + geom_bar(width=0.8)
+
+plot_HG<-ggplot(all_nhl, aes(HG)) 
+plot_HG<-plot_HG + ggtitle("Home Goals") 
+plot_HG<-plot_HG + scale_x_continuous(breaks=seq(0,10,2))
+plot_HG<-plot_HG + geom_bar(width=0.8)
+
+plot_diff<-ggplot(all_nhl, aes(AG-HG)) 
+plot_diff<-plot_diff + ggtitle("Goal Difference (+ve is Away Win)")
+plot_diff<-plot_diff + scale_x_continuous(breaks=seq(-10,10,2))
+plot_diff<-plot_diff + geom_bar(width=0.8)
+
+plot_grid(plot_AG, plot_HG, plot_diff, align='h', nrow=1, ncol=3)
+```
+
+Next time we'll start actually modelling goals scored with Dixon-Coles.
