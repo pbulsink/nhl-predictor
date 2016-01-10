@@ -370,5 +370,23 @@ t_one_calc<-proc.time()-t
 
 Running it again, we get 10 seasons taking `r as.integer(t_all_calc[3])` seconds, and one season `r as.integer(t_one_calc[3])` seconds. Just a little longer, as we expected.. We could optimize that futher if we wanted (eg. drop data for weight of less than some amount), but fortunately we only have to run this once to start predicting all sorts of results.
 
-The functions are now set up. We can dig into them later this post. Next time we'll run them and predict some games!
+We'll plot the Attack and Defence parameters for each team to se if there's any correllation.
+```{r attack_defence_corr_plot, cache=TRUE, echo=FALSE}
+team_params<-data.frame("Team"=nhl_teams, "Attack"=0, "Defence"=0)
+for (t in 1:length(as.character(unique(nhl2015$AwayTeam)))){
+     team<-as.character(unique(nhl2015$AwayTeam))[t]
+     team_params[team_params$Team == team,]$Attack=res_2015$par[paste("Attack", team, sep=".")]
+     team_params[team_params$Team == team,]$Defend=res_2015$par[paste("Defence", team, sep=".")]
+}
+
+ggplot(team_params, aes(x=Attack, y=Defence, color=Team)) +
+    ggtitle("Attack vs Defence Parameters") +
+    xlab("Defence") + 
+    ylab("Attack") +
+    geom_point() +
+    geom_smooth(method="lm")
+```
+
+Next time we'll run them and predict some games!
+
 

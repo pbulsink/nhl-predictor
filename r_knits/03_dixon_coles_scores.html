@@ -323,7 +323,574 @@ predictOneGame &lt;- function(pmatrix, stats, home, away) {
 ##  [8,] &quot;2&quot;  &quot;3&quot;  NA  
 ##  [9,] &quot;3&quot;  &quot;6&quot;  NA  
 ## [10,] &quot;2&quot;  &quot;3&quot;  &quot;SO&quot;</code></pre>
-<p>Next time we’ll look at simulating a whole season.</p>
+<p>To predict the winner of a game in OT, we’ll use the win percentages of each team in the most recent season. Let’s grab the results from 2015 and figure out each team’s OT and Shootout results. We have to look at each game, so we’ll take this opportunity to collect the rest of the stats available to make a stats table.</p>
+<pre class="r"><code>makeStatsTable &lt;- function(df) {
+    tmpTable = data.frame(Team = sort(unique(df$AwayTeam)), GP = 0, W = 0, OTL = 0, 
+        L = 0, ROW = 0, HomeGames = 0, HomeWin = 0, HomeOTW = 0, HomeSOW = 0, 
+        HomeOTL = 0, HomeLoss = 0, AwayGames = 0, AwayWin = 0, AwayOTW = 0, 
+        AwaySOW = 0, AwayOTL = 0, AwayLoss = 0, P = 0, HomeFor = 0, HomeAgainst = 0, 
+        AwayFor = 0, AwayAgainst = 0, GF = 0, GA = 0, DIFF = 0, PP = 0, OT.Win.Percent = 0)
+    
+    # Games Played
+    tmpTable$HomeGames = as.numeric(table(df$HomeTeam))
+    tmpTable$AwayGames = as.numeric(table(df$AwayTeam))
+    
+    # Wins
+    tmpTable$HomeWin = as.numeric(table(df$HomeTeam[df$HG &gt; df$AG]))
+    tmpTable$AwayWin = as.numeric(table(df$AwayTeam[df$AG &gt; df$HG]))
+    
+    # Losses
+    tmpTable$HomeLoss = as.numeric(table(df$HomeTeam[df$AG &gt; df$HG]))
+    tmpTable$AwayLoss = as.numeric(table(df$AwayTeam[df$HG &gt; df$AG]))
+    
+    # OT Wins
+    tmpTable$HomeOTW = as.numeric(table(df$HomeTeam[(df$OT.Win == &quot;H&quot;) &amp; (df$OT.SO == 
+        &quot;OT&quot;)]))
+    tmpTable$HomeSOW = as.numeric(table(df$HomeTeam[(df$OT.Win == &quot;H&quot;) &amp; (df$OT.SO == 
+        &quot;SO&quot;)]))
+    
+    tmpTable$AwayOTW = as.numeric(table(df$AwayTeam[(df$OT.Win == &quot;V&quot;) &amp; (df$OT.SO == 
+        &quot;OT&quot;)]))
+    tmpTable$AwaySOW = as.numeric(table(df$AwayTeam[(df$OT.Win == &quot;V&quot;) &amp; (df$OT.SO == 
+        &quot;SO&quot;)]))
+    
+    # OT Losses
+    tmpTable$HomeOTL = as.numeric(table(df$HomeTeam[(df$OT.Win == &quot;V&quot;)]))
+    tmpTable$AwayOTL = as.numeric(table(df$AwayTeam[(df$OT.Win == &quot;H&quot;)]))
+    
+    # W/L/OTL/ROW
+    tmpTable$GP = tmpTable$HomeGames + tmpTable$AwayGames
+    tmpTable$W = tmpTable$HomeWin + tmpTable$AwayWin + tmpTable$HomeOTW + tmpTable$HomeSOW + 
+        tmpTable$AwayOTW + tmpTable$AwaySOW
+    tmpTable$OTL = tmpTable$HomeOTL + tmpTable$AwayOTL
+    tmpTable$L = tmpTable$HomeLoss + tmpTable$AwayLoss
+    tmpTable$ROW = tmpTable$W - (tmpTable$HomeSOW + tmpTable$AwaySOW)
+    
+    # Goal Diffs (includes OT scores)
+    tmpTable$HomeFor = as.numeric(tapply(df$HG, df$HomeTeam, sum, na.rm = TRUE)) + 
+        tmpTable$HomeOTW + tmpTable$HomeSOW
+    tmpTable$HomeAgainst = as.numeric(tapply(df$AG, df$HomeTeam, sum, na.rm = TRUE)) + 
+        tmpTable$HomeOTL
+    
+    tmpTable$AwayFor = as.numeric(tapply(df$AG, df$AwayTeam, sum, na.rm = TRUE)) + 
+        tmpTable$AwayOTW + tmpTable$AwaySOW
+    tmpTable$AwayAgainst = as.numeric(tapply(df$HG, df$AwayTeam, sum, na.rm = TRUE)) + 
+        tmpTable$AwayOTL
+    
+    
+    tmpTable$GF = ifelse(is.na(tmpTable$HomeFor), 0, tmpTable$HomeFor) + ifelse(is.na(tmpTable$AwayFor), 
+        0, tmpTable$AwayFor)
+    tmpTable$GA = ifelse(is.na(tmpTable$HomeAgainst), 0, tmpTable$HomeAgainst) + 
+        ifelse(is.na(tmpTable$AwayAgainst), 0, tmpTable$AwayAgainst)
+    
+    tmpTable$DIFF = tmpTable$GF - tmpTable$GA
+    
+    # Additional Stats
+    tmpTable$P = 2 * tmpTable$W + tmpTable$OTL
+    tmpTable$PP = tmpTable$P/tmpTable$GP
+    tmpTable$OT.Win.Percent = (tmpTable$HomeOTW + tmpTable$HomeSOW + tmpTable$AwayOTW + 
+        tmpTable$AwaySOW)/(tmpTable$HomeOTW + tmpTable$HomeSOW + tmpTable$AwayOTW + 
+        tmpTable$AwayOTL + tmpTable$OTL)
+    tmpTable &lt;- tmpTable[, c(&quot;Team&quot;, &quot;GP&quot;, &quot;W&quot;, &quot;OTL&quot;, &quot;L&quot;, &quot;ROW&quot;, &quot;P&quot;, &quot;GF&quot;, 
+        &quot;GA&quot;, &quot;DIFF&quot;, &quot;PP&quot;, &quot;OT.Win.Percent&quot;)]
+    tmpTable &lt;- tmpTable[order(-tmpTable$P, -tmpTable$PP, -tmpTable$ROW, -tmpTable$DIFF), 
+        ]
+    
+    rownames(tmpTable) &lt;- 1:nrow(tmpTable)
+    
+    return(tmpTable)
+}</code></pre>
+<p>We use it by calling <code>makeStatsTable</code> with the input being the season data.</p>
+<table>
+<thead>
+<tr class="header">
+<th align="left">Team</th>
+<th align="right">GP</th>
+<th align="right">W</th>
+<th align="right">OTL</th>
+<th align="right">L</th>
+<th align="right">ROW</th>
+<th align="right">P</th>
+<th align="right">GF</th>
+<th align="right">GA</th>
+<th align="right">DIFF</th>
+<th align="right">PP</th>
+<th align="right">OT.Win.Percent</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">Tampa Bay Lightning</td>
+<td align="right">82</td>
+<td align="right">47</td>
+<td align="right">7</td>
+<td align="right">24</td>
+<td align="right">45</td>
+<td align="right">101</td>
+<td align="right">259</td>
+<td align="right">210</td>
+<td align="right">49</td>
+<td align="right">1.2317073</td>
+<td align="right">0.2222222</td>
+</tr>
+<tr class="even">
+<td align="left">New York Rangers</td>
+<td align="right">82</td>
+<td align="right">49</td>
+<td align="right">2</td>
+<td align="right">22</td>
+<td align="right">47</td>
+<td align="right">100</td>
+<td align="right">248</td>
+<td align="right">187</td>
+<td align="right">61</td>
+<td align="right">1.2195122</td>
+<td align="right">0.6000000</td>
+</tr>
+<tr class="odd">
+<td align="left">Anaheim Ducks</td>
+<td align="right">82</td>
+<td align="right">45</td>
+<td align="right">4</td>
+<td align="right">24</td>
+<td align="right">40</td>
+<td align="right">94</td>
+<td align="right">230</td>
+<td align="right">223</td>
+<td align="right">7</td>
+<td align="right">1.1463415</td>
+<td align="right">0.5555556</td>
+</tr>
+<tr class="even">
+<td align="left">Montreal Canadiens</td>
+<td align="right">82</td>
+<td align="right">44</td>
+<td align="right">4</td>
+<td align="right">22</td>
+<td align="right">43</td>
+<td align="right">92</td>
+<td align="right">215</td>
+<td align="right">183</td>
+<td align="right">32</td>
+<td align="right">1.1219512</td>
+<td align="right">0.4666667</td>
+</tr>
+<tr class="odd">
+<td align="left">Vancouver Canucks</td>
+<td align="right">82</td>
+<td align="right">44</td>
+<td align="right">3</td>
+<td align="right">29</td>
+<td align="right">41</td>
+<td align="right">91</td>
+<td align="right">238</td>
+<td align="right">220</td>
+<td align="right">18</td>
+<td align="right">1.1097561</td>
+<td align="right">0.5714286</td>
+</tr>
+<tr class="even">
+<td align="left">St. Louis Blues</td>
+<td align="right">82</td>
+<td align="right">43</td>
+<td align="right">5</td>
+<td align="right">24</td>
+<td align="right">39</td>
+<td align="right">91</td>
+<td align="right">240</td>
+<td align="right">199</td>
+<td align="right">41</td>
+<td align="right">1.1097561</td>
+<td align="right">0.3750000</td>
+</tr>
+<tr class="odd">
+<td align="left">Nashville Predators</td>
+<td align="right">82</td>
+<td align="right">42</td>
+<td align="right">6</td>
+<td align="right">25</td>
+<td align="right">38</td>
+<td align="right">90</td>
+<td align="right">227</td>
+<td align="right">204</td>
+<td align="right">23</td>
+<td align="right">1.0975610</td>
+<td align="right">0.4285714</td>
+</tr>
+<tr class="even">
+<td align="left">Los Angeles Kings</td>
+<td align="right">82</td>
+<td align="right">40</td>
+<td align="right">8</td>
+<td align="right">27</td>
+<td align="right">38</td>
+<td align="right">88</td>
+<td align="right">220</td>
+<td align="right">198</td>
+<td align="right">22</td>
+<td align="right">1.0731707</td>
+<td align="right">0.1578947</td>
+</tr>
+<tr class="odd">
+<td align="left">Chicago Blackhawks</td>
+<td align="right">82</td>
+<td align="right">43</td>
+<td align="right">1</td>
+<td align="right">28</td>
+<td align="right">38</td>
+<td align="right">87</td>
+<td align="right">224</td>
+<td align="right">184</td>
+<td align="right">40</td>
+<td align="right">1.0609756</td>
+<td align="right">0.7777778</td>
+</tr>
+<tr class="even">
+<td align="left">Washington Capitals</td>
+<td align="right">82</td>
+<td align="right">40</td>
+<td align="right">6</td>
+<td align="right">26</td>
+<td align="right">37</td>
+<td align="right">86</td>
+<td align="right">237</td>
+<td align="right">198</td>
+<td align="right">39</td>
+<td align="right">1.0487805</td>
+<td align="right">0.2941176</td>
+</tr>
+<tr class="odd">
+<td align="left">New York Islanders</td>
+<td align="right">82</td>
+<td align="right">40</td>
+<td align="right">5</td>
+<td align="right">28</td>
+<td align="right">37</td>
+<td align="right">85</td>
+<td align="right">245</td>
+<td align="right">228</td>
+<td align="right">17</td>
+<td align="right">1.0365854</td>
+<td align="right">0.3750000</td>
+</tr>
+<tr class="even">
+<td align="left">Minnesota Wild</td>
+<td align="right">82</td>
+<td align="right">41</td>
+<td align="right">2</td>
+<td align="right">28</td>
+<td align="right">39</td>
+<td align="right">84</td>
+<td align="right">226</td>
+<td align="right">195</td>
+<td align="right">31</td>
+<td align="right">1.0243902</td>
+<td align="right">0.4285714</td>
+</tr>
+<tr class="odd">
+<td align="left">Winnipeg Jets</td>
+<td align="right">82</td>
+<td align="right">38</td>
+<td align="right">8</td>
+<td align="right">26</td>
+<td align="right">35</td>
+<td align="right">84</td>
+<td align="right">225</td>
+<td align="right">205</td>
+<td align="right">20</td>
+<td align="right">1.0243902</td>
+<td align="right">0.2727273</td>
+</tr>
+<tr class="even">
+<td align="left">Pittsburgh Penguins</td>
+<td align="right">82</td>
+<td align="right">37</td>
+<td align="right">8</td>
+<td align="right">27</td>
+<td align="right">35</td>
+<td align="right">82</td>
+<td align="right">215</td>
+<td align="right">206</td>
+<td align="right">9</td>
+<td align="right">1.0000000</td>
+<td align="right">0.2000000</td>
+</tr>
+<tr class="odd">
+<td align="left">Ottawa Senators</td>
+<td align="right">82</td>
+<td align="right">36</td>
+<td align="right">8</td>
+<td align="right">26</td>
+<td align="right">34</td>
+<td align="right">80</td>
+<td align="right">231</td>
+<td align="right">210</td>
+<td align="right">21</td>
+<td align="right">0.9756098</td>
+<td align="right">0.2727273</td>
+</tr>
+<tr class="even">
+<td align="left">Detroit Red Wings</td>
+<td align="right">82</td>
+<td align="right">37</td>
+<td align="right">5</td>
+<td align="right">25</td>
+<td align="right">36</td>
+<td align="right">79</td>
+<td align="right">229</td>
+<td align="right">212</td>
+<td align="right">17</td>
+<td align="right">0.9634146</td>
+<td align="right">0.3333333</td>
+</tr>
+<tr class="odd">
+<td align="left">Colorado Avalanche</td>
+<td align="right">82</td>
+<td align="right">34</td>
+<td align="right">9</td>
+<td align="right">31</td>
+<td align="right">28</td>
+<td align="right">77</td>
+<td align="right">214</td>
+<td align="right">224</td>
+<td align="right">-10</td>
+<td align="right">0.9390244</td>
+<td align="right">0.2800000</td>
+</tr>
+<tr class="even">
+<td align="left">Calgary Flames</td>
+<td align="right">82</td>
+<td align="right">37</td>
+<td align="right">2</td>
+<td align="right">30</td>
+<td align="right">35</td>
+<td align="right">76</td>
+<td align="right">233</td>
+<td align="right">211</td>
+<td align="right">22</td>
+<td align="right">0.9268293</td>
+<td align="right">0.5555556</td>
+</tr>
+<tr class="odd">
+<td align="left">San Jose Sharks</td>
+<td align="right">82</td>
+<td align="right">36</td>
+<td align="right">4</td>
+<td align="right">33</td>
+<td align="right">35</td>
+<td align="right">76</td>
+<td align="right">224</td>
+<td align="right">227</td>
+<td align="right">-3</td>
+<td align="right">0.9268293</td>
+<td align="right">0.2000000</td>
+</tr>
+<tr class="even">
+<td align="left">Boston Bruins</td>
+<td align="right">82</td>
+<td align="right">34</td>
+<td align="right">7</td>
+<td align="right">27</td>
+<td align="right">32</td>
+<td align="right">75</td>
+<td align="right">206</td>
+<td align="right">204</td>
+<td align="right">2</td>
+<td align="right">0.9146341</td>
+<td align="right">0.3000000</td>
+</tr>
+<tr class="odd">
+<td align="left">Florida Panthers</td>
+<td align="right">82</td>
+<td align="right">33</td>
+<td align="right">8</td>
+<td align="right">29</td>
+<td align="right">29</td>
+<td align="right">74</td>
+<td align="right">201</td>
+<td align="right">216</td>
+<td align="right">-15</td>
+<td align="right">0.9024390</td>
+<td align="right">0.2000000</td>
+</tr>
+<tr class="even">
+<td align="left">Columbus Blue Jackets</td>
+<td align="right">82</td>
+<td align="right">35</td>
+<td align="right">3</td>
+<td align="right">35</td>
+<td align="right">31</td>
+<td align="right">73</td>
+<td align="right">229</td>
+<td align="right">248</td>
+<td align="right">-19</td>
+<td align="right">0.8902439</td>
+<td align="right">0.5384615</td>
+</tr>
+<tr class="odd">
+<td align="left">Philadelphia Flyers</td>
+<td align="right">82</td>
+<td align="right">31</td>
+<td align="right">11</td>
+<td align="right">31</td>
+<td align="right">28</td>
+<td align="right">73</td>
+<td align="right">213</td>
+<td align="right">227</td>
+<td align="right">-14</td>
+<td align="right">0.8902439</td>
+<td align="right">0.2142857</td>
+</tr>
+<tr class="even">
+<td align="left">Dallas Stars</td>
+<td align="right">82</td>
+<td align="right">34</td>
+<td align="right">2</td>
+<td align="right">31</td>
+<td align="right">34</td>
+<td align="right">70</td>
+<td align="right">254</td>
+<td align="right">252</td>
+<td align="right">2</td>
+<td align="right">0.8536585</td>
+<td align="right">0.2000000</td>
+</tr>
+<tr class="odd">
+<td align="left">New Jersey Devils</td>
+<td align="right">82</td>
+<td align="right">31</td>
+<td align="right">6</td>
+<td align="right">36</td>
+<td align="right">26</td>
+<td align="right">68</td>
+<td align="right">180</td>
+<td align="right">208</td>
+<td align="right">-28</td>
+<td align="right">0.8292683</td>
+<td align="right">0.2941176</td>
+</tr>
+<tr class="even">
+<td align="left">Toronto Maple Leafs</td>
+<td align="right">82</td>
+<td align="right">28</td>
+<td align="right">6</td>
+<td align="right">44</td>
+<td align="right">25</td>
+<td align="right">62</td>
+<td align="right">209</td>
+<td align="right">260</td>
+<td align="right">-51</td>
+<td align="right">0.7560976</td>
+<td align="right">0.3333333</td>
+</tr>
+<tr class="odd">
+<td align="left">Carolina Hurricanes</td>
+<td align="right">82</td>
+<td align="right">28</td>
+<td align="right">4</td>
+<td align="right">41</td>
+<td align="right">25</td>
+<td align="right">60</td>
+<td align="right">186</td>
+<td align="right">219</td>
+<td align="right">-33</td>
+<td align="right">0.7317073</td>
+<td align="right">0.3333333</td>
+</tr>
+<tr class="even">
+<td align="left">Edmonton Oilers</td>
+<td align="right">82</td>
+<td align="right">20</td>
+<td align="right">11</td>
+<td align="right">44</td>
+<td align="right">18</td>
+<td align="right">51</td>
+<td align="right">194</td>
+<td align="right">280</td>
+<td align="right">-86</td>
+<td align="right">0.6219512</td>
+<td align="right">0.1200000</td>
+</tr>
+<tr class="odd">
+<td align="left">Arizona Coyotes</td>
+<td align="right">82</td>
+<td align="right">19</td>
+<td align="right">3</td>
+<td align="right">50</td>
+<td align="right">17</td>
+<td align="right">41</td>
+<td align="right">165</td>
+<td align="right">267</td>
+<td align="right">-102</td>
+<td align="right">0.5000000</td>
+<td align="right">0.4545455</td>
+</tr>
+<tr class="even">
+<td align="left">Buffalo Sabres</td>
+<td align="right">82</td>
+<td align="right">19</td>
+<td align="right">3</td>
+<td align="right">51</td>
+<td align="right">15</td>
+<td align="right">41</td>
+<td align="right">157</td>
+<td align="right">269</td>
+<td align="right">-112</td>
+<td align="right">0.5000000</td>
+<td align="right">0.4545455</td>
+</tr>
+</tbody>
+</table>
+<p>We’ll feed it into a log5 function, and use that instead of a factor of 0.5 to determine OT winners. As well, it’s trivial to determine that on average, the number of games ending in shootout is slightly higher than the number ending in overtime.</p>
+<pre class="r"><code>log5.OT.predictor &lt;- function(stats, home, away) {
+    # reurns chances that home team wins in OT
+    pa &lt;- stats[stats$Team == home, ]$OT.Win.Percent
+    pb &lt;- stats[stats$Team == away, ]$OT.Win.Percent
+    
+    log5 &lt;- (pa - (pa * pb))/(pa + pb - (2 * pa * pb))
+    
+    return(log5)
+}
+
+predict_one_game &lt;- function(pmatrix, stats, home, away) {
+    random &lt;- runif(1)
+    while (random &gt; pmatrix[nrow(pmatrix), ncol(pmatrix)]) {
+        random &lt;- runif(1)
+    }
+    score &lt;- as.vector(which(pmatrix &gt; random, arr.ind = T)[1, ])
+    # scores is matrix c(home away)
+    score &lt;- score - 1
+    score[3] &lt;- NA
+    if (score[1] == score[2]) {
+        if (runif(1) &lt; log5.OT.predictor(stats, home, away)) {
+            # Home Win
+            score[1] &lt;- score[1] + 1
+            
+        } else {
+            score[2] &lt;- score[2] + 1
+        }
+        if (runif(1) &lt; 0.56) {
+            score[3] &lt;- &quot;SO&quot;
+        } else {
+            score[3] &lt;- &quot;OT&quot;
+        }
+    }
+    return(score)
+}</code></pre>
+<p>Finally, one more round of predictions:</p>
+<pre class="r"><code>t(replicate(10, predictOneGame(pmatrix, home, away)))</code></pre>
+<pre><code>##       [,1] [,2] [,3]
+##  [1,] &quot;1&quot;  &quot;2&quot;  &quot;SO&quot;
+##  [2,] &quot;2&quot;  &quot;4&quot;  NA  
+##  [3,] &quot;2&quot;  &quot;3&quot;  &quot;SO&quot;
+##  [4,] &quot;4&quot;  &quot;2&quot;  NA  
+##  [5,] &quot;4&quot;  &quot;3&quot;  NA  
+##  [6,] &quot;3&quot;  &quot;8&quot;  NA  
+##  [7,] &quot;3&quot;  &quot;2&quot;  NA  
+##  [8,] &quot;4&quot;  &quot;1&quot;  NA  
+##  [9,] &quot;2&quot;  &quot;4&quot;  NA  
+## [10,] &quot;4&quot;  &quot;0&quot;  NA</code></pre>
+<p>Next time we’ll look at predicting a whole sesason.</p>
 
 
 </div>
