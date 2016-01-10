@@ -4,7 +4,10 @@ author: "Philip Bulsink"
 date:
 output: html_document
 ---
-
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(fig.width=12, fig.height=8, fig.path='Figs/',
+                      warning=FALSE, message=FALSE, tidy=TRUE)
+```
 ```{r prep_chunk, echo=FALSE, cache=TRUE, warning=FALSE}
 #Import data 
 otTagger<-function(row) {
@@ -255,7 +258,7 @@ probs_all_time<-predictResult(time_res_all, home, away)
 
 Now we can look at one of the results (say, 2015 not time weighted) and see the probability of a home win (Montreal), draw, or away win (Toronto): `r probs_2015`. In fact, we can plot the probabilities for the four fits we have, to show the effect of each fit type.
 
-```{r echo=FALSE, cache=TRUE}
+```{r hda_mtl_plot, echo=FALSE, cache=TRUE}
 library(reshape2)
 library(ggplot2)
 probs_df<-as.data.frame(rbind(probs_2015, probs_2015_time, probs_all, probs_all_time))
@@ -271,7 +274,7 @@ ggplot(pmelt, aes(y=value, x=variable, fill=Sim.Type)) +
 
 While the odds of a draw haven't changed much, the odds of a Montreal or Toronto win have slightly. Note that over the past 10 years, Montreal has performed better, on average, than Toronto, so this is expected. As well, Monteal benefits from the home ice advantage. We can calculate this for a Toronto home game too.
 
-```{r echo=FALSE, cache=TRUE}
+```{r hda_tor_plot, echo=FALSE, cache=TRUE}
 probs_df<-as.data.frame(rbind(predictResult(res_2015, away, home), predictResult(res_all, away, home), predictResult(time_res_2015, away, home), predictResult(time_res_all, away, home)))
 colnames(probs_df)<-c("Toronto Win", "Draw", "Montreal Win")
 probs_df$Sim.Type<-c("2015 Season", "2015 Season Time Weighted", "All Seasons", "All Seasons Time Weighted")
@@ -284,3 +287,82 @@ ggplot(pmelt, aes(y=value, x=variable, fill=Sim.Type)) +
 ```
 
 Why the difference in these two results? That's because the home advantage factor ranges from `r min(res_2015$par['HOME'], res_all$par['HOME'], time_res_2015$par['HOME'], time_res_all$par['HOME'])` to `r max(res_2015$par['HOME'], res_all$par['HOME'], time_res_2015$par['HOME'], time_res_all$par['HOME'])`. While not a huge range, it does impact the probabilities enough to make a noticeable difference.
+
+We can predict scores for our Toronto at Montreal game with some random number work. First, we'll modify the probability matrix to contain the `sum` of the probabilities to that point. Then we can index goals based on the probability correllating to a random number.
+
+```{r}
+pmatrix<-matrix(nrow=nrow(probability_matrix), ncol=ncol(probability_matrix))
+current_p<-0
+for (i in 1:ncol(pmatrix)){
+    for (j in 1:nrow(pmatrix)){
+        pmatrix[j,i]<-current_p
+        current_p<-current_p + probability_matrix[j,i]
+    }
+}
+
+predictOneGame<-function(pmatrix,stats,home,away){
+    random<-runif(1)
+    
+    #This ensures that there's no issue with random number larger than the largest pmatrix probability
+    while (random > pmatrix[nrow(pmatrix), ncol(pmatrix)]){
+        random<-runif(1)
+    }
+    
+    score<-as.vector(which(pmatrix>random, arr.ind=T)[1,])
+    # scores is matrix c(home away), returning INDEX (ie 0-0 is 1,1)
+    score<-score-1
+    return(score)
+}
+```
+
+So, we can predict the score for a game with `predictOneGame`, and get a result of `home away`:
+```{r}
+predictOneGame(pmatrix, home, away)
+```
+
+Lets' do that a few times, to see the different results we get.
+```{r}
+t(replicate(10, predictOneGame(pmatrix, home, away)))
+```
+
+But, recall that the NHL doesn't allow draws. We cold solve that by randomly choosing a winner, but that does a disservice to teams who excel at those scenarios. A simple way of adding OT is to use the `log5` method, invented by [Bill James](https://en.wikipedia.org/wiki/Bill_James), which applies the following formula, from [Wikipedia]() The Log5 estimate for the probability of A defeating B is $p_{A,B} = \frac{p_A-p_A\times p_B}{p_A+p_B-2\times p_A\times p_B}$, where $p_A$ is the proportion of A wins, and $p_B$ is the proportion of B wins. For now, we'll plug in even values (we'll use `pa=pb=0.5`, so `log5 = (pa-(pa*pb))/(pa+pb-(2*pa*pb))` will equal 0.5 as well), but later we can re-evaluate performance of each team.
+
+We'll also go 50/50 for Shootout and Overtime, but can adjust those odds later too.
+
+Re-writing the score prediction formula will give us the chance to simulate draw handling.
+```{r}
+predictOneGame<-function(pmatrix,stats,home,away){
+    random<-runif(1)
+    #This ensures that there's no issue with random number larger than the largest pmatrix probability
+    while (random > pmatrix[nrow(pmatrix), ncol(pmatrix)]){
+        random<-runif(1)
+    }
+    
+    score<-as.vector(which(pmatrix>random, arr.ind=T)[1,])
+    # scores is matrix c(home away), returning INDEX (ie 0-0 is 1,1)
+    score<-score-1
+    score[3]<-NA
+    if (score[1] == score[2]){
+        if(runif(1) > 0.5){
+            score[1] <- score[1] + 1
+        }
+        else{
+            score[2] <- score[2] + 1
+        }
+        if(runif(1) > 0.5){
+            score[3]<-"OT"   
+        }
+        else{
+            score[3]<-"SO"
+        }
+    }
+    return(score)
+}
+```
+
+Trying this score simulation again:
+```{r}
+t(replicate(10, predictOneGame(pmatrix, home, away)))
+```
+
+Next time we'll look at simulating a whole season.
