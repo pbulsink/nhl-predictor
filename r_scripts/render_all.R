@@ -1,0 +1,9 @@
+render_all<-function(){
+    library(knitr)
+    library(rmarkdown)
+    rmarkdown::render("./r_knits/01_data_preparation.Rmd")
+    rmarkdown::render("./r_knits/02_dixon_coles_and_hockey_data.Rmd")
+    rmarkdown::render("./r_knits/03_dixon_coles_scores.Rmd")
+    rmarkdown::render("./r_knits/04_simulating_a_season.Rmd")
+    rmarkdown::render("./r_knits/05_evaluating_models.Rmd")
+}
