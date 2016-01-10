@@ -1,0 +1,266 @@
+---
+title: "05 Evaluating the Models"
+author: "Philip Bulsink"
+date:
+output: html_document
+---
+
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(fig.width=12, fig.height=8, fig.path='Figs/',
+                      warning=FALSE, message=FALSE, tidy=TRUE)
+```
+```{r prep_chunk, echo=FALSE, cache=TRUE, warning=FALSE}
+#Import data 
+otTagger<-function(row) {
+  if (row['OT.SO'] != '') {
+    if(row['AG']>row['HG']) {
+      return("A")
+    }
+    else{
+      return("H")
+    }
+  }
+  else {
+    return("")
+  }
+}
+
+otFixer<-function(row) {
+  H<-as.integer(row['HG'])
+  A<-as.integer(row['AG'])
+  if(row['OT.Win']=='H') {
+    H<-H-1
+  }
+  else if (row['OT.Win']=='A') {
+    A<-A-1
+  }
+  return(data.frame('HG'=H,'AG'=A))
+}
+
+nhlDataPrep<-function(df) {
+  df<-df[,c('Date','Visitor','G','Home','G.1','X')]
+  colnames(df)<-c("Date", "AwayTeam","AG","HomeTeam","HG","OT.SO")
+  df<-df[!is.na(df$AG),]
+  df$OT.Win<-apply(df,1,otTagger)
+  scores<-do.call("rbind",apply(df,1,otFixer))
+  df$AG<-scores$AG
+  df$HG<-scores$HG
+  df$Date<-as.Date(df$Date)
+  return(df)
+}
+
+clean_teams<-function(df){
+    df[df$Home == "Phoenix Coyotes",]$Home <- "Arizona Coyotes"
+    df[df$Visitor == "Phoenix Coyotes",]$Visitor <- "Arizona Coyotes"
+    df[df$Home == "Mighty Ducks of Anaheim",]$Home <- "Anaheim Ducks"
+    df[df$Visitor == "Mighty Ducks of Anaheim",]$Visitor <- "Anaheim Ducks"
+    df[df$Home == "Atlanta Thrashers",]$Home <- "Winnipeg Jets"
+    df[df$Visitor == "Atlanta Thrashers",]$Visitor <- "Winnipeg Jets"
+}
+
+    
+getAndPrepAllData<-function(year_list=c(2006, 2007, 2008, 2009,2010,2011,2012,2013,2014,2015,2016)){
+    df<-data.frame(Date=NULL, Visitor=NULL, G=NULL, Home=NULL, G.1=NULL, X=NULL)
+    for (year in 1:length(year_list)){
+        df<-rbind(df, read.csv(paste('../data/leagues_NHL_',year_list[year],'_games_games.csv', sep=''))[c("Date", "Visitor", "G", "Home", "G.1", "X")])
+    }
+    try(clean_teams(df), silent=TRUE)
+    df<-droplevels(df)
+    df<-nhlDataPrep(df)
+    return(df)
+}
+
+nhl_all<-getAndPrepAllData()
+nhl2015<-getAndPrepAllData(year_list = c(2015))
+
+tau <- Vectorize(function(xx, yy, lambda, mu, rho){
+    if (xx == 0 & yy == 0){return(1 - (lambda*mu*rho))
+    } else if (xx == 0 & yy == 1){return(1 + (lambda*rho))
+    } else if (xx == 1 & yy == 0){return(1 + (mu*rho))
+    } else if (xx == 1 & yy == 1){return(1 - rho)
+    } else {return(1)}
+})
+
+DCweights <- function(dates, currentDate=Sys.Date(), xi=0){
+    datediffs <- dates - as.Date(currentDate)
+    datediffs <- as.numeric(datediffs *-1)
+    w <- exp(-1*xi*datediffs)
+    w[datediffs <= 0] <- 0 #Future dates should have zero weights
+    return(w)
+}
+
+DClogLik <- function(y1, y2, lambda, mu, rho=0, weights=NULL){
+    #rho=0, independence
+    #y1 home goals
+    #y2 away goals
+    loglik <- log(tau(y1, y2, lambda, mu, rho)) + log(dpois(y1, lambda)) + log(dpois(y2, mu))
+    if (is.null(weights)){
+        return(sum(loglik))
+    } else {
+        return(sum(loglik*weights))
+    }
+}
+
+DCmodelData <- function(df){
+    team.names <- unique(c(levels(df$HomeTeam), levels(df$AwayTeam)))
+    
+    # attack, with sum-to-zero constraint
+    ## home
+    hm.a <- model.matrix(~ HomeTeam - 1, data=df)
+    hm.a[df$HomeTeam == team.names[length(team.names)], ] <- -1
+    hm.a <- hm.a[,1:(length(team.names)-1)]
+    
+    # away
+    am.a <- model.matrix(~ AwayTeam -1, data=df)
+    am.a[df$AwayTeam == team.names[length(team.names)], ] <- -1
+    am.a <- am.a[,1:(length(team.names)-1)]
+    
+    # defence, same as before 
+    hm.d <- model.matrix(~ HomeTeam - 1, data=df)
+    am.d <- model.matrix(~ AwayTeam -1, data=df)
+    
+    return(list(homeTeamDMa=hm.a, homeTeamDMd=hm.d,
+                awayTeamDMa=am.a, awayTeamDMd=am.d,
+                homeGoals=df$HG, awayGoals=df$AG,
+                dates=df$Date,
+                teams=team.names)) 
+}
+
+DCoptimFn <- function(params, DCm, xi=0){
+    home.p <- params[1]
+    rho.p <- params[2]
+    
+    nteams <- length(DCm$teams)
+    attack.p <- matrix(params[3:(nteams+1)], ncol=1) #one column less
+    defence.p <- matrix(params[(nteams+2):length(params)], ncol=1) 
+    
+    # need to multiply with the correct matrices
+    lambda <- exp(DCm$homeTeamDMa %*% attack.p + DCm$awayTeamDMd %*% defence.p + home.p)
+    mu <- exp(DCm$awayTeamDMa %*% attack.p + DCm$homeTeamDMd %*% defence.p)
+    
+    w<-DCweights(DCm$dates, xi=xi)
+    return(
+        DClogLik(y1=DCm$homeGoals, y2=DCm$awayGoals, lambda, mu, rho.p, w) * -1
+    )
+}
+
+doDCPrediction<-function(df, xi=0){
+    #Get a useful data set
+    dcm<-DCmodelData(df)
+    nteams <- length(dcm$teams)
+    
+    #dummy fill parameters
+    #initial parameter estimates
+    attack.params <- rep(.1, times=nteams-1) # one less parameter
+    defence.params <- rep(-0.8, times=nteams)
+    home.param <- 0.06
+    rho.init <- 0.03
+    par.inits <- c(home.param, rho.init, attack.params, defence.params)
+    
+    #informative names
+    #skip the last team
+    names(par.inits) <- c('HOME', 'RHO', 
+                          paste('Attack', dcm$teams[1:(nteams-1)], sep='.'),
+                          paste('Defence', dcm$teams, sep='.'))
+    
+    res <- optim(par=par.inits, fn=DCoptimFn, DCm=dcm, xi=xi, method='BFGS')
+    
+    parameters <- res$par
+    
+    #compute last team attack parameter
+    missing.attack <- sum(parameters[3:(nteams+1)]) * -1
+    
+    #put it in the parameters vector
+    parameters <- c(parameters[1:(nteams+1)], missing.attack, parameters[(nteams+2):length(parameters)])
+    names(parameters)[nteams+2] <- paste('Attack.', dcm$teams[nteams], sep='')
+    
+    #increase attack by one
+    parameters[3:(nteams+2)] <- parameters[3:(nteams+2)] + 1  
+    
+    #decrease defence by one
+    parameters[(nteams+3):length(parameters)] <- parameters[(nteams+3):length(parameters)] - 1 
+    
+    res$par<-parameters
+    return(res)
+}
+
+res_all<-doDCPrediction(nhl_all)
+res_2015<-doDCPrediction(nhl2015)
+time_res_all<-doDCPrediction(nhl_all, xi=0.005)
+time_res_2015<-doDCPrediction(nhl2015, xi=0.005)
+
+log5.OT.predictor<-function(stats, home, away){
+    # reurns chances that home team wins in OT
+    pa<-stats[stats$Team == home,]$OT.Win.Percent
+    pb<-stats[stats$Team == away,]$OT.Win.Percent
+    
+    log5<-(pa-(pa*pb))/(pa+pb-(2*pa*pb))
+    
+    return(log5)
+}
+
+build_score_matrix<-function(res, home, away, m=NULL, maxgoal=8){
+    if (!is.null(m)){
+        # Expected goals home
+        lambda <- predict(m, data.frame(Home=1, Team=home, Opponent=away), type='response')
+        
+        # Expected goals away
+        mu <- predict(m, data.frame(Home=0, Team=away, Opponent=home), type='response')
+    }
+    else {
+        attack.home<-paste("Attack",home,sep=".")
+        attack.away<-paste("Attack",away,sep=".")
+        defence.home<-paste("Defence",home,sep=".")
+        defence.away<-paste("Defence",away,sep=".")
+        
+        # Expected goals home
+        lambda <- exp(res$par['HOME'] + res$par[attack.home] + res$par[defence.away])
+        # Expected goals away
+        mu <- exp(res$par[attack.away] + res$par[defence.home])
+    }
+    probability_matrix <- dpois(0:maxgoal, lambda) %*% t(dpois(0:maxgoal, mu))
+    
+    scaling_matrix <- matrix(tau(c(0,1,0,1), c(0,0,1,1), lambda, mu, res$par['RHO']), nrow=2)
+    probability_matrix[1:2, 1:2] <- probability_matrix[1:2, 1:2] * scaling_matrix
+    
+    pmatrix<-matrix(nrow=nrow(probability_matrix), ncol=ncol(probability_matrix))
+    current_p<-0
+    for (i in 1:ncol(pmatrix)){
+        for (j in 1:nrow(pmatrix)){
+            pmatrix[j,i]<-current_p
+            current_p<-current_p + probability_matrix[j,i]
+        }
+    }
+    return(pmatrix)
+}
+
+predict_one_game<-function(pmatrix,stats,home,away){
+    random<-runif(1)
+    #Ensure random isn't higher than matrix sum (less than indexed).
+    while (random > pmatrix[nrow(pmatrix), ncol(pmatrix)]){
+        random<-runif(1)
+    }
+    score<-as.vector(which(pmatrix>random, arr.ind=T)[1,])
+    # scores is matrix c(home away) as INDEXES (eg. 0-0 score is 1,1)
+    score<-score-1
+    score[3]<-NA
+    if (score[1] == score[2]){
+        if(log5.OT.predictor(stats,home,away)>runif(1)){
+            score[1] <- score[1] + 1
+            
+        }
+        else{
+            score[2] <- score[2] + 1
+        }
+        if(runif(1) > 0.5){
+            score[3]<-"OT"   
+        }
+        else{
+            score[3]<-"SO"
+        }
+    }
+    return(score)
+}
+```
+
+
