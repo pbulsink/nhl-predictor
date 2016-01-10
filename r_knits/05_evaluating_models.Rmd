@@ -261,6 +261,159 @@ predict_one_game<-function(pmatrix,stats,home,away){
     }
     return(score)
 }
+
+buildScoreMatrix<-function(res, home, away, maxgoal=8){
+    attack.home<-paste("Attack",home,sep=".")
+    attack.away<-paste("Attack",away,sep=".")
+    defence.home<-paste("Defence",home,sep=".")
+    defence.away<-paste("Defence",away,sep=".")
+    
+    # Expected goals home
+    lambda <- exp(res$par['HOME'] + res$par[attack.home] + res$par[defence.away])
+    # Expected goals away
+    mu <- exp(res$par[attack.away] + res$par[defence.home])
+    
+    probability_matrix <- dpois(0:maxgoal, lambda) %*% t(dpois(0:maxgoal, mu))
+    
+    scaling_matrix <- matrix(tau(c(0,1,0,1), c(0,0,1,1), lambda, mu, res$par['RHO']), nrow=2)
+    probability_matrix[1:2, 1:2] <- probability_matrix[1:2, 1:2] * scaling_matrix
+    
+    pmatrix<-matrix(nrow=nrow(probability_matrix), ncol=ncol(probability_matrix))
+    #sum of probabilities matrix
+    current_p<-0
+    for (i in 1:ncol(pmatrix)){
+        for (j in 1:nrow(pmatrix)){
+            pmatrix[j,i]<-current_p
+            current_p<-current_p + probability_matrix[j,i]
+        }
+    }
+    return(pmatrix)
+}
+
+predictScore<-function(res, stats, home, away, m=NULL, maxgoal=8){
+    return(predictOneGame(buildScoreMatrix(res, home, away, m=m, maxgoal=maxgoal), stats=stats, home, away))
+}
+
+nhlFutureGames<-function(df){
+    df<-df[,c('Date','Visitor','G','Home','G.1')]
+    df$Date<-as.Date(df$Date)
+    df<-df[!(df$Date < Sys.Date()),]
+    df$OT.SO<-""
+    df$OT.Win<-""
+    colnames(df)<-c("Date", "AwayTeam","AG","HomeTeam","HG","OT.SO","OT.Win")
+    return(df)
+}
+
+future_games<-nhlFutureGames(read.csv('../data/leagues_NHL_2016_games_games.csv'))
+
+nhl2016<-getAndPrepAllData(yearlist=c(2016))
+nhl_2016_stats<-makeStatsTable(nhl2016)
+
+buildStandingsTable<-function(stats, standings=NA){
+    if (is.na(standings)){
+        standings<-matrix(0, nrow=length(unique(stats$Team)), ncol=length(unique(stats$Team)))
+        rownames(standings)<-sort(unique(stats$Team))
+        colnames(standings)<-c(1:ncol(standings))
+    }
+    
+    
+    for(t in 1:nrow(standings)){
+        standings[stats[t, "Team"], t] <- standings[stats[t, "Team"], t]+1
+    }
+    return(standings)
+}
+
+nhl_2016_standings<-buildStandingsTable(nhl_2016_stats)
+
+predictRemainderOfSeason<-function(res, schedule, stats, maxgoal=8){
+    #Takes in a schedule of games and returns the schedule with scores filled out.
+    for (game in 1:nrow(schedule)){
+        home<-as.character(schedule[game, "HomeTeam"])
+        away<-as.character(schedule[game, "AwayTeam"])
+        score<-predict_score(res, stats, home, away, maxgoal = maxgoal)
+        if (!is.na(score[3])){
+            sched[game,"OT.SO"]<-score[3]
+            if(score[1]>score[2]){
+                schedule[game, "HG"]<-score[2]
+                schedule[game, "AG"]<-score[2]
+                schedule[game, "OT.Win"]<-"H"
+            }
+            else{
+                schedule[game, "HG"]<-score[1]
+                schedule[game, "AG"]<-score[1]
+                schedule[game, "OT.Win"]<-"V"
+            }
+        }
+        else{
+            schedule[game, "HG"]<-score[1]
+            schedule[game, "AG"]<-score[2]
+        }
+    }
+    schedule$HG<-as.integer(schedule$HG)
+    schedule$AG<-as.integer(schedule$AG)
+    return(schedule)
+}
+
+simulateSeason<-function(res, schedule, stats, past_results, n=1000, maxgoal=8){
+    #simulates the remainder of the season n times, returning a standings table with the times each team finished at each position
+    standings<-matrix(0, nrow=length(unique(nhl.this.year.stats$Team)), ncol=length(unique(nhl.this.year.stats$Team)))
+    rownames(standings)<-sort(unique(nhl.this.year.stats$Team))
+    colnames(standings)<-c(1:ncol(standings))
+    for (i in 1:n){
+        scores<-predictRemainderOfSeason(res=res, schedule=schedule, stats=stats)
+        stats_table<-makeStatsTable(rbind(past_results, scores))
+        standings<-buildStandingsTable(stats=stats_table, standings=standings)
+    }
+    return(standings)
+}
+
+nhl_divisions<-list(
+    "Atlantic" = c("Boston Bruins","Buffalo Sabres","Detroit Red Wings","Florida Panthers","Montreal Canadiens","Ottawa Senators","Tampa Bay Lightning","Toronto Maple Leafs"),
+    "Central" = c("Colorado Avalanche", "Chicago Blackhawks", "Dallas Stars", "Minnesota Wild", "Nashville Predators", "St. Louis Blues", "Winnipeg Jets"),
+    "Metropolitan" = c( "Carolina Hurricanes",  "Columbus Blue Jackets", "Philadelphia Flyers", "Pittsburgh Penguins", "New Jersey Devils", "New York Islanders", "New York Rangers", "Washington Capitals"),
+    "Pacific" = c("Anaheim Ducks", "Arizona Coyotes", "Calgary Flames", "Edmonton Oilers", "Los Angeles Kings", "San Jose Sharks", "Vancouver Canucks")
+)
+
+nhl_conferences<-list(
+    "East" = c(unlist(nhl_divisions["Atlantic"]), unlist(nhl_divisions["Metropolitan"])),
+    "West" = c(unlist(nhl_divisions["Central"]), unlist(nhl_divisions["Pacific"]))
+)
+
+
+getDivisionStats<-function(stats, division){
+    return(stats[stats$Team %in% unlist(nhl_divisions[division]),])
+}
+
+getConferenceStats<-function(stats, conference){
+    if (conference=="East"){
+        a<-getDivisionStandings(stats, "Atlantic")
+        b<-getDivisionStandings(stats, "Metropolitan")
+    }
+    else{
+        a<-getDivisionStandings(stats, "Central")
+        b<-getDivisionStandings(stats, "Pacific")
+    }
+    top6<-rbind(a[1:3], b[1:3])
+    top6<-top6[order(-top6$P, -top6$PP, -top6$ROW, -top6$DIFF),]
+    remainder<-rbind(a[4:nrow(a),], b[4:nrow(b),])
+    remainder<-remainder[order(-remainder$P, -remainder$PP, -remainder$ROW, -remainder$DIFF)]
+    
+    return(rbind(top6, remainder))
+}
+
+getConferenceStandings<-function(standings, conference){
+    if (conference=="East"){
+        a<-as.data.frame(getDivisionStandings(standings, "Atlantic"))
+        b<-as.data.frame(getDivisionStandings(standings, "Metropolitan"))
+    }
+    else{
+        a<-as.data.frame(getDivisionStandings(standings, "Central"))
+        b<-as.data.frame(getDivisionStandings(standings, "Pacific"))
+    }
+    standings<-rbind(a,b)
+    standings<-standings[do.call(order, as.data.frame(standings)),]
+    return(standings)
+}
 ```
 
 
