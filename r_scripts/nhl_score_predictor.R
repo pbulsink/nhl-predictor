@@ -115,13 +115,13 @@ predict_remainder_of_season<-function(res, sched, stats, m=NULL, maxgoal=7){
     return(sched)
 }
 
-simulate_season<-function(res, sched, stats, past, n=1000, m=NULL, maxgoal=7){
+simulate_season<-function(res, sched, stats, past_results, n=1000, m=NULL, maxgoal=7){
     standings<-matrix(0, nrow=length(unique(nhl.this.year.stats$Team)), ncol=length(unique(nhl.this.year.stats$Team)))
     rownames(standings)<-sort(unique(nhl.this.year.stats$Team))
     colnames(standings)<-c(1:ncol(standings))
     for (i in 1:n){
-        scores<-predict_remainder_of_season(res=res, sched=sched, stats=stats)
-        standing.table<-standings_alt(rbind(past, scores))
+        scores<-predict_remainder_of_season(res=res, sched=sched, stats=stats, m=m)
+        standing.table<-standings_alt(rbind(past_results, scores))
         standings<-build_standings_table(stats=standing.table, standings=standings)
     }
     return(standings)
