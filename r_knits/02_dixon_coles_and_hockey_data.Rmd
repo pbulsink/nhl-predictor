@@ -5,7 +5,7 @@ date:
 output: html_document
 ---
 
-```{r echo=FALSE, cache=TRUE}
+```{r echo=FALSE, cache=TRUE, warning=FALSE}
 #Import data 
 otTagger<-function(row) {
   if (row['OT.SO'] != '') {
@@ -202,42 +202,20 @@ doDCPrediction<-function(df){
     return(res)
     
 }
-
-predictResult<-function(res,home,away,maxgoal=8){
-    attack.home<-paste("Attack",home,sep=".")
-    attack.away<-paste("Attack",away,sep=".")
-    defence.home<-paste("Defence",home,sep=".")
-    defence.away<-paste("Defence",away,sep=".")
-    
-    # Expected goals home
-    lambda <- exp(res$par['HOME'] + res$par[attack.home] + res$par[defence.away])
-    # Expected goals away
-    mu <- exp(res$par[attack.away] + res$par[defence.home])
-    
-    probability_matrix <- dpois(0:maxgoal, lambda) %*% t(dpois(0:maxgoal, mu))
-    
-    scaling_matrix <- matrix(tau(c(0,1,0,1), c(0,0,1,1), lambda, mu, res$par['RHO']), nrow=2)
-    probability_matrix[1:2, 1:2] <- probability_matrix[1:2, 1:2] * scaling_matrix
-    
-    HomeWinProbability <- sum(probability_matrix[lower.tri(probability_matrix)])
-    DrawProbability <- sum(diag(probability_matrix))
-    AwayWinProbability <- sum(probability_matrix[upper.tri(probability_matrix)])
-    
-    return(c(HomeWinProbability,DrawProbability,AwayWinProbability))
-}
 ```
 
-Use of this is to feed in the data into the `doDCPrediction` function, returning the `res` parameter object. This is a long calculation. With that fed into the predictResult function, with two teams and an optional modification of the `maxgoal` parameter, one can get the chances of a home win, draw (which would lead to overtime) or away win.
+Use of this is to feed in the data into the `doDCPrediction` function, returning the `res` parameter object. This is a long calculation. We'll use this result to simulate an actual game in the next post.
 
-```{r warning=FALSE, cache=TRUE, echo=FALSE}
+
+```{r all_res, warning=FALSE, cache=TRUE, echo=FALSE}
 t<-proc.time()
 nhl.all.res<-doDCPrediction(nhl_all)
 t_all_calc<-proc.time()-t
 ```
 
-```{r warning=FALSE, cache=TRUE, echo=FALSE}
+```{r one_res, warning=FALSE, cache=TRUE, echo=FALSE}
 t<-proc.time()
-nhl.all.res<-doDCPrediction(nhl2015)
+nhl.one.res<-doDCPrediction(nhl2015)
 t_one_calc<-proc.time()-t
 ```
 
@@ -257,7 +235,7 @@ DCweights <- function(dates, currentDate=Sys.Date(), xi=0){
 
 We can see the effect this has by throwing the list of dates from our scores into the function, with different values of $\xi$.
 
-```{r cache=TRUE}
+```{r xi_plot, cache=TRUE}
 #Turn this into a shiny app
 library(reshape2)
 xi_list<-c(0.0001, 0.001, 0.002, 0.003, 0.005, 0.01, 0.03, 0.05, 0.1, 0.3)
@@ -373,18 +351,19 @@ doDCPrediction<-function(df, xi=0){
 
 Remaking those functions took a lot of space, but only a few lines changed. We multiply the log likelyhood function by weights, and the remainder is to bring the calculated weights from the user through the model. 
 
-```{r warning=FALSE, cache=TRUE, echo=FALSE}
+```{r xi_all_res, warning=FALSE, cache=TRUE, echo=FALSE}
 t<-proc.time()
-nhl.all.res<-doDCPrediction(nhl_all)
+nhl.all.res<-doDCPrediction(nhl_all, xi=0.005)
 t_all_calc<-proc.time()-t
 ```
 
-```{r warning=FALSE, cache=TRUE, echo=FALSE}
+```{r xi_one_res, warning=FALSE, cache=TRUE, echo=FALSE}
 t<-proc.time()
-nhl.all.res<-doDCPrediction(nhl2015)
+nhl.one.res<-doDCPrediction(nhl2015, xi=0.005)
 t_one_calc<-proc.time()-t
 ```
 
-Running it again, we see the 10 seasons took `r as.integer(t_all_calc[3])` seconds, and one season `r as.integer(t_one_calc[3])` seconds. Just a little longer, as we expected.. We could optimize that futher if we wanted (eg. drop data for weight of less than some amount), but fortunately we only have to run this once to start predicting all sorts of results.
+Running it again, we get 10 seasons taking `r as.integer(t_all_calc[3])` seconds, and one season `r as.integer(t_one_calc[3])` seconds. Just a little longer, as we expected.. We could optimize that futher if we wanted (eg. drop data for weight of less than some amount), but fortunately we only have to run this once to start predicting all sorts of results.
 
-The functions are now set up. Next time we'll run them and predict some games!
+The functions are now set up. We can dig into them later this post. Next time we'll run them and predict some games!
+
