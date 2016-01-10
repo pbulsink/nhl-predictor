@@ -53,14 +53,14 @@ predict_one_game<-function(pmatrix,stats,home,away){
     score<-score-1
     score[3]<-NA
     if (score[1] == score[2]){
-        if(log5.OT.predictor(stats,home,away)>runif(1)){
+        if(log5.OT.predictor(stats,home,away)<runif(1)){
             score[1] <- score[1] + 1
             
         }
         else{
             score[2] <- score[2] + 1
         }
-        if(runif(1) > 0.5){
+        if(runif(1) > 0.56){
             score[3]<-"OT"   
         }
         else{
