@@ -193,6 +193,14 @@ log5OTPredictor<-function(stats, home, away){
     pa<-stats[stats$Team == home,]$OT.Win.Percent
     pb<-stats[stats$Team == away,]$OT.Win.Percent
     
+    #PA or PB = 0 gives a NAN/div0 error
+    if (pa==0){
+        pa=0.001
+    }
+    if (pb==0){
+        pb==0.001
+    }
+    
     log5<-(pa-(pa*pb))/(pa+pb-(2*pa*pb))
     if (!is.na(log5)){
         return(log5)
@@ -338,8 +346,7 @@ buildStandingsTable<-function(stats, standings=NA){
         rownames(standings)<-sort(unique(stats$Team))
         colnames(standings)<-c(1:ncol(standings))
     }
-    
-    
+
     for(t in 1:nrow(standings)){
         standings[stats[t, "Team"], t] <- standings[stats[t, "Team"], t]+1
     }
@@ -405,7 +412,7 @@ future_games<-nhlFutureGames(read.csv('../data/leagues_NHL_2016_games_games.csv'
 
 Now, for each game, simulate a result. But, we need some place to put the results... lets add them to the results table we made last time! As well, simulating a season once doesn't give us a lot of information. We may as well make a best guess where teams will finish. What we really want to do is simulate the season lots of times, to get a decent probability of where a team will finish in the standings. This will take two functions. One to finish the season, taking the schedule, stats (for overtime win percent, etc), and parameters that we generated in the Dixon-Coles process. The other will take that data, plus the season standings thus far, and give us a likely probability of where the teams will finish as a standings table.
 
-```{r cache=TRUE}
+```{r}
 nhl2016<-nhlDataPrep(read.csv('../data/leagues_NHL_2016_games_games.csv'))
 nhl_2016_stats<-makeStatsTable(nhl2016)
 
@@ -472,9 +479,17 @@ We can predict the season's remaining games, to figure out what chances our favo
 res_2016<-doDCPrediction(nhl2016)
 ```
 
-Once the parameters are calculated, we can simulate the season. This we'll do with `n=1000`, to save time.
+If we do that once, we can get a nice stats table, as we'd find on the NHL website:
+```{r predict_remainder, cache=TRUE}
+remainder_2016<-predictRemainderOfSeason(res_2016, future_games, nhl_2016_stats)
+all_results<-rbind(nhl2016, remainder_2016)
+stats_sim_2016<-makeStatsTable(all_results)
+kable(stats_sim_2016[,1:10])
+```
 
-```{r predict_season, cache=TRUE}
+But, while doing that once is cool, we need to do that over and over again to really get a picture of the chance each team has of making the playoffs by the end of the season. This we'll do with `n=1000`, to save time.
+
+```{r predict_seasons, cache=TRUE}
 nhl_2016_predicted_standings<-simulateSeason(res_2016, future_games, nhl_2016_stats, past_results=nhl2016, n=1000)
 kable(nhl_2016_predicted_standings)
 ```

@@ -79,7 +79,7 @@ Last entry we did some data importing and cleaning of historical NHL data, from 
 
 First, Dixon and Coles provide a method to increase the number of low-goal scoring games. A keen eye would notice that the goals scored is a bit biased 'left' compared to the actual Poisson curve:
 
-```{r goals_vs_poisson_plot, echo=FALSE}
+```{r goals_vs_poisson_plot, echo=FALSE, cache=TRUE}
 library(ggplot2)
 goals<-data.frame("Goals"=as.integer(nhl_all$AG))
 goals$Goals<-cbind(goals$Goals, as.integer(nhl_all$HG))
