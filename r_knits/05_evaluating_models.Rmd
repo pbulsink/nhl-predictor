@@ -4,7 +4,6 @@ author: "Philip Bulsink"
 date:
 output: html_document
 ---
-
 ```{r global_options, include=FALSE}
 knitr::opts_chunk$set(fig.width=12, fig.height=8, fig.path='Figs/',
                       warning=FALSE, message=FALSE, tidy=TRUE)
@@ -126,7 +125,7 @@ DCmodelData <- function(df){
                 teams=team.names)) 
 }
 
-DCoptimFn <- function(params, DCm, xi=0){
+DCoptimFn <- function(params, DCm, xi=0, currentDate=Sys.Date()){
     home.p <- params[1]
     rho.p <- params[2]
     
@@ -138,13 +137,13 @@ DCoptimFn <- function(params, DCm, xi=0){
     lambda <- exp(DCm$homeTeamDMa %*% attack.p + DCm$awayTeamDMd %*% defence.p + home.p)
     mu <- exp(DCm$awayTeamDMa %*% attack.p + DCm$homeTeamDMd %*% defence.p)
     
-    w<-DCweights(DCm$dates, xi=xi)
+    w<-DCweights(DCm$dates, xi=xi, currentDate=currentDate)
     return(
         DClogLik(y1=DCm$homeGoals, y2=DCm$awayGoals, lambda, mu, rho.p, w) * -1
     )
 }
 
-doDCPrediction<-function(df, xi=0){
+doDCPrediction<-function(df, xi=0, currentDate=Sys.Date()){
     #Get a useful data set
     dcm<-DCmodelData(df)
     nteams <- length(dcm$teams)
@@ -163,7 +162,7 @@ doDCPrediction<-function(df, xi=0){
                           paste('Attack', dcm$teams[1:(nteams-1)], sep='.'),
                           paste('Defence', dcm$teams, sep='.'))
     
-    res <- optim(par=par.inits, fn=DCoptimFn, DCm=dcm, xi=xi, method='BFGS')
+    res <- optim(par=par.inits, fn=DCoptimFn, DCm=dcm, xi=xi, currentDate=currentDate, method='BFGS')
     
     parameters <- res$par
     
@@ -184,22 +183,34 @@ doDCPrediction<-function(df, xi=0){
     return(res)
 }
 
-res_all<-doDCPrediction(nhl_all)
-res_2015<-doDCPrediction(nhl2015)
-time_res_all<-doDCPrediction(nhl_all, xi=0.005)
-time_res_2015<-doDCPrediction(nhl2015, xi=0.005)
+#res_all<-doDCPrediction(nhl_all)
+#res_2015<-doDCPrediction(nhl2015)
+#time_res_all<-doDCPrediction(nhl_all, xi=0.005)
+#time_res_2015<-doDCPrediction(nhl2015, xi=0.005)
 
-log5.OT.predictor<-function(stats, home, away){
+log5OTPredictor<-function(stats, home, away){
     # reurns chances that home team wins in OT
     pa<-stats[stats$Team == home,]$OT.Win.Percent
     pb<-stats[stats$Team == away,]$OT.Win.Percent
     
-    log5<-(pa-(pa*pb))/(pa+pb-(2*pa*pb))
+    #PA or PB = 0 gives a NAN/div0 error
+    if (pa==0){
+        pa=0.001
+    }
+    if (pb==0){
+        pb==0.001
+    }
     
-    return(log5)
+    log5<-(pa-(pa*pb))/(pa+pb-(2*pa*pb))
+    if (!is.na(log5)){
+        return(log5)
+    }
+    else {
+        return(0.5)
+    }
 }
 
-build_score_matrix<-function(res, home, away, m=NULL, maxgoal=8){
+buildScoreMatrix<-function(res, home, away, maxgoal=8){
     if (!is.null(m)){
         # Expected goals home
         lambda <- predict(m, data.frame(Home=1, Team=home, Opponent=away), type='response')
@@ -234,7 +245,7 @@ build_score_matrix<-function(res, home, away, m=NULL, maxgoal=8){
     return(pmatrix)
 }
 
-predict_one_game<-function(pmatrix,stats,home,away){
+predictOneGame<-function(pmatrix,stats,home,away){
     random<-runif(1)
     #Ensure random isn't higher than matrix sum (less than indexed).
     while (random > pmatrix[nrow(pmatrix), ncol(pmatrix)]){
@@ -245,9 +256,9 @@ predict_one_game<-function(pmatrix,stats,home,away){
     score<-score-1
     score[3]<-NA
     if (score[1] == score[2]){
-        if(log5.OT.predictor(stats,home,away)>runif(1)){
+        log5<-log5OTPredictor(stats, home, away)
+        if(log5>runif(1)){
             score[1] <- score[1] + 1
-            
         }
         else{
             score[2] <- score[2] + 1
@@ -262,6 +273,87 @@ predict_one_game<-function(pmatrix,stats,home,away){
     return(score)
 }
 
+makeStatsTable<-function(df) {
+    tmpTable = data.frame(Team = sort(unique(df$AwayTeam)),
+                          GP = 0, W = 0, OTL = 0, L = 0, ROW=0,
+                          HomeGames = 0, HomeWin = 0, HomeOTW = 0, HomeSOW = 0, HomeOTL = 0, HomeLoss = 0,
+                          AwayGames = 0, AwayWin = 0, AwayOTW = 0, AwaySOW = 0, AwayOTL = 0, AwayLoss = 0,
+                          P = 0,
+                          HomeFor = 0, HomeAgainst = 0,
+                          AwayFor = 0, AwayAgainst = 0,
+                          GF = 0, GA = 0, DIFF = 0, PP=0, OT.Win.Percent=0)
+    
+    # Games Played
+    tmpTable$HomeGames = as.numeric(table(df$HomeTeam))
+    tmpTable$AwayGames = as.numeric(table(df$AwayTeam))
+    
+    #Wins
+    tmpTable$HomeWin = as.numeric(table(df$HomeTeam[df$HG > df$AG]))
+    tmpTable$AwayWin = as.numeric(table(df$AwayTeam[df$AG > df$HG]))
+    
+    #Losses
+    tmpTable$HomeLoss = as.numeric(table(df$HomeTeam[df$AG > df$HG]))
+    tmpTable$AwayLoss = as.numeric(table(df$AwayTeam[df$HG > df$AG]))
+    
+    #OT Wins
+    tmpTable$HomeOTW = as.numeric(table(df$HomeTeam[(df$OT.Win == "H") & (df$OT.SO == "OT")]))
+    tmpTable$HomeSOW = as.numeric(table(df$HomeTeam[(df$OT.Win == "H") & (df$OT.SO == "SO")]))
+
+    tmpTable$AwayOTW = as.numeric(table(df$AwayTeam[(df$OT.Win == "V") & (df$OT.SO == "OT")]))
+    tmpTable$AwaySOW = as.numeric(table(df$AwayTeam[(df$OT.Win == "V") & (df$OT.SO == "SO")]))
+    
+    #OT Losses
+    tmpTable$HomeOTL = as.numeric(table(df$HomeTeam[(df$OT.Win == "V")]))
+    tmpTable$AwayOTL = as.numeric(table(df$AwayTeam[(df$OT.Win == "H")]))
+    
+    #W/L/OTL/ROW
+    tmpTable$GP = tmpTable$HomeGames + tmpTable$AwayGames
+    tmpTable$W = tmpTable$HomeWin + tmpTable$AwayWin + tmpTable$HomeOTW + tmpTable$HomeSOW + tmpTable$AwayOTW + tmpTable$AwaySOW
+    tmpTable$OTL = tmpTable$HomeOTL + tmpTable$AwayOTL
+    tmpTable$L = tmpTable$HomeLoss + tmpTable$AwayLoss
+    tmpTable$ROW = tmpTable$W - (tmpTable$HomeSOW + tmpTable$AwaySOW)
+    
+    #Goal Diffs (includes OT scores)
+    tmpTable$HomeFor = as.numeric(tapply(df$HG, df$HomeTeam, sum, na.rm = TRUE)) + tmpTable$HomeOTW + tmpTable$HomeSOW
+    tmpTable$HomeAgainst = as.numeric(tapply(df$AG, df$HomeTeam, sum, na.rm = TRUE)) + tmpTable$HomeOTL
+    
+    tmpTable$AwayFor = as.numeric(tapply(df$AG, df$AwayTeam, sum, na.rm = TRUE)) + tmpTable$AwayOTW + tmpTable$AwaySOW
+    tmpTable$AwayAgainst = as.numeric(tapply(df$HG, df$AwayTeam, sum, na.rm = TRUE)) + tmpTable$AwayOTL
+    
+    
+    tmpTable$GF = ifelse(is.na(tmpTable$HomeFor), 0, tmpTable$HomeFor) + ifelse(is.na(tmpTable$AwayFor), 0, tmpTable$AwayFor)
+    tmpTable$GA = ifelse(is.na(tmpTable$HomeAgainst), 0, tmpTable$HomeAgainst) + ifelse(is.na(tmpTable$AwayAgainst), 0, tmpTable$AwayAgainst)
+    
+    tmpTable$DIFF = tmpTable$GF - tmpTable$GA
+    
+    #Additional Stats
+    tmpTable$P = 2 * tmpTable$W + tmpTable$OTL
+    tmpTable$PP = tmpTable$P/tmpTable$GP
+    tmpTable$OT.Win.Percent = (tmpTable$HomeOTW + tmpTable$HomeSOW + tmpTable$AwayOTW + tmpTable$AwaySOW)/(tmpTable$HomeOTW + tmpTable$HomeSOW + tmpTable$AwayOTW + tmpTable$AwayOTL + tmpTable$OTL)
+    tmpTable<-tmpTable[,c("Team","GP", "W", "OTL", "L", "ROW", "P", "GF", "GA", "DIFF", "PP", "OT.Win.Percent")]
+    tmpTable<-tmpTable[order(-tmpTable$P, -tmpTable$PP, -tmpTable$ROW, -tmpTable$DIFF),]
+    
+    rownames(tmpTable)<-1:nrow(tmpTable)
+    
+    return(tmpTable)
+}
+
+stats2015<-makeStatsTable(nhl2015)
+stats_all<-makeStatsTable(nhl_all)
+
+buildStandingsTable<-function(stats, standings=NA){
+    if (is.na(standings)){
+        standings<-matrix(0, nrow=length(unique(stats$Team)), ncol=length(unique(stats$Team)))
+        rownames(standings)<-sort(unique(stats$Team))
+        colnames(standings)<-c(1:ncol(standings))
+    }
+    
+    
+    for(t in 1:nrow(standings)){
+        standings[stats[t, "Team"], t] <- standings[stats[t, "Team"], t]+1
+    }
+    return(standings)
+}
 buildScoreMatrix<-function(res, home, away, maxgoal=8){
     attack.home<-paste("Attack",home,sep=".")
     attack.away<-paste("Attack",away,sep=".")
@@ -290,8 +382,8 @@ buildScoreMatrix<-function(res, home, away, maxgoal=8){
     return(pmatrix)
 }
 
-predictScore<-function(res, stats, home, away, m=NULL, maxgoal=8){
-    return(predictOneGame(buildScoreMatrix(res, home, away, m=m, maxgoal=maxgoal), stats=stats, home, away))
+predictScore<-function(res, stats, home, away, maxgoal=8){
+    return(predictOneGame(buildScoreMatrix(res, home, away, maxgoal=maxgoal), stats=stats, home, away))
 }
 
 nhlFutureGames<-function(df){
@@ -306,8 +398,8 @@ nhlFutureGames<-function(df){
 
 future_games<-nhlFutureGames(read.csv('../data/leagues_NHL_2016_games_games.csv'))
 
-nhl2016<-getAndPrepAllData(yearlist=c(2016))
-nhl_2016_stats<-makeStatsTable(nhl2016)
+nhl2016<-nhlDataPrep(read.csv('../data/leagues_NHL_2016_games_games.csv'))
+#nhl_2016_stats<-makeStatsTable(nhl2016)
 
 buildStandingsTable<-function(stats, standings=NA){
     if (is.na(standings)){
@@ -316,23 +408,22 @@ buildStandingsTable<-function(stats, standings=NA){
         colnames(standings)<-c(1:ncol(standings))
     }
     
-    
     for(t in 1:nrow(standings)){
         standings[stats[t, "Team"], t] <- standings[stats[t, "Team"], t]+1
     }
     return(standings)
 }
 
-nhl_2016_standings<-buildStandingsTable(nhl_2016_stats)
+#nhl_2016_standings<-buildStandingsTable(nhl_2016_stats)
 
 predictRemainderOfSeason<-function(res, schedule, stats, maxgoal=8){
     #Takes in a schedule of games and returns the schedule with scores filled out.
     for (game in 1:nrow(schedule)){
         home<-as.character(schedule[game, "HomeTeam"])
         away<-as.character(schedule[game, "AwayTeam"])
-        score<-predict_score(res, stats, home, away, maxgoal = maxgoal)
+        score<-predictScore(res, stats, home, away, maxgoal = maxgoal)
         if (!is.na(score[3])){
-            sched[game,"OT.SO"]<-score[3]
+            schedule[game,"OT.SO"]<-score[3]
             if(score[1]>score[2]){
                 schedule[game, "HG"]<-score[2]
                 schedule[game, "AG"]<-score[2]
@@ -354,13 +445,13 @@ predictRemainderOfSeason<-function(res, schedule, stats, maxgoal=8){
     return(schedule)
 }
 
-simulateSeason<-function(res, schedule, stats, past_results, n=1000, maxgoal=8){
+simulateSeason<-function(res, schedule, stats, past_results, n=10000, maxgoal=8){
     #simulates the remainder of the season n times, returning a standings table with the times each team finished at each position
-    standings<-matrix(0, nrow=length(unique(nhl.this.year.stats$Team)), ncol=length(unique(nhl.this.year.stats$Team)))
-    rownames(standings)<-sort(unique(nhl.this.year.stats$Team))
+    standings<-matrix(0, nrow=length(unique(stats$Team)), ncol=length(unique(stats$Team)))
+    rownames(standings)<-sort(unique(stats$Team))
     colnames(standings)<-c(1:ncol(standings))
     for (i in 1:n){
-        scores<-predictRemainderOfSeason(res=res, schedule=schedule, stats=stats)
+        scores<-predictRemainderOfSeason(res=res, schedule=schedule, stats=stats, maxgoal=maxgoal)
         stats_table<-makeStatsTable(rbind(past_results, scores))
         standings<-buildStandingsTable(stats=stats_table, standings=standings)
     }
@@ -386,12 +477,12 @@ getDivisionStats<-function(stats, division){
 
 getConferenceStats<-function(stats, conference){
     if (conference=="East"){
-        a<-getDivisionStandings(stats, "Atlantic")
-        b<-getDivisionStandings(stats, "Metropolitan")
+        a<-getDivisionStats(stats, "Atlantic")
+        b<-getDivisionStats(stats, "Metropolitan")
     }
     else{
-        a<-getDivisionStandings(stats, "Central")
-        b<-getDivisionStandings(stats, "Pacific")
+        a<-getDivisionStats(stats, "Central")
+        b<-getDivisionStats(stats, "Pacific")
     }
     top6<-rbind(a[1:3], b[1:3])
     top6<-top6[order(-top6$P, -top6$PP, -top6$ROW, -top6$DIFF),]
@@ -402,18 +493,129 @@ getConferenceStats<-function(stats, conference){
 }
 
 getConferenceStandings<-function(standings, conference){
+    #Change this to sort by MAX of standings
+    standings<-as.data.frame(standings)
+    standings$Team<-rownames(standings)
     if (conference=="East"){
-        a<-as.data.frame(getDivisionStandings(standings, "Atlantic"))
-        b<-as.data.frame(getDivisionStandings(standings, "Metropolitan"))
+        a<-getDivisionStats(standings, "Atlantic")
+        b<-getDivisionStats(standings, "Metropolitan")
     }
     else{
-        a<-as.data.frame(getDivisionStandings(standings, "Central"))
-        b<-as.data.frame(getDivisionStandings(standings, "Pacific"))
+        a<-getDivisionStats(standings, "Central")
+        b<-getDivisionStats(standings, "Pacific")
     }
     standings<-rbind(a,b)
-    standings<-standings[do.call(order, as.data.frame(standings)),]
-    return(standings)
+    standings<-subset(standings, select=-Team)
+    standings<-standings[do.call(order, c(as.list(standings), decreasing=TRUE)),]
+    return(as.matrix(standings))
 }
 ```
 
+Last post we predicted the results of the remainder of the season. It's exciting to know that your favourite team might make the playoffs, but how can you trust the model? We haven't performed any validation so far. Maybe all the work we've done is a worse predictor than a 50/50 split of winners? Lets dive in and find out.
+
+We'll start by evaluating the models for 'RPS' (Rank Probability Score). There's a great discussion of why this is important by Anthony Constantinou that you can read [here (pdf)](http://constantinou.info/downloads/papers/solvingTheProblem.pdf). The great thing is, the RPS calculation is already available in R from the `verification` package.
+
+```{r warnings=TRUE}
+library(verification) #This requires the latest version of R to properly load.
+```
+
+The RPS formula takes a matrix of probabilities and a result, and returns the score based on how close the model was. For example, if team A (away) was given a 0.6 chance of winning, team B (home) a 0.25, and a draw of 0.15, then the probability set is ${A,D,H} = {0.6,0.15,0.25}$. If Team B wins, then the result is 3, the third column. The formula for RPS is: $$ \mathrm{RPS}=\dfrac{1}{r-1}\sum\limits_{i=1}^{r-1}\left(\sum\limits_{j=1}^{i}(p_j-e_j\right)^2 $$, where $r$ is the number of potential outcomes (in our case, 3), $p_j$ is the pobability of outcome at position $j$, and $e_j$ is the actual outcome at that position. Our example thus looks as this:
+
+$\sum\limits_{i=1,2}^{(r=3-)1}(p_j)$ | $\sum\limits_{i=1,2}^{(r=3-)1}(e_j)$ | RPS
+---|---|---
+${0.6,0.75}$ | ${0,0}$|$0.46125$
+
+A smaller RPS value is better, so when we get a 'home' win with $RPS = 0.46125$, or an away win with $RPS = 0.11125$, we can say that the model 'performed better' with the prediction of an away win. There are more examples of performance in the above linked paper by Constantinou. 
+
+To evaluate each model, let's compare the results of 2014-2015 season to our predictions. We'll start with training the model with all the games up to December 31 (approximately the first half of the season), and compare the predicted results to the actuals from then to the end of the season. We can experimentally determine a better value for $\xi$ (see the time-weight dependance post) than the 0.005 we've tossed around. 
+
+To start, let's build a 2015 testing data (a schedule), 2015 training data, 2015 known results, and 2005-2014 data for longer predictions.
+
+```{r data_building, cache=TRUE}
+data_2015<-nhlDataPrep(read.csv('../data/leagues_NHL_2015_games_games.csv'))
+train_2015<-data_2015[data_2015$Date <= as.Date('2014-12-31'),]
+train_long<-getAndPrepAllData(year_list = c(2006,2007,2008,2009,2010,2011,2012,2013,2014))
+train_long<-rbind(train_long, train_2015)
+
+test_schedule<-data_2015[data_2015$Date > as.Date('2014-12-31'),]
+test_schedule$HG<-test_schedule$AG<-test_schedule$OT.SO<-test_schedule$OT.Win<-""
+
+test_results<-data_2015[data_2015$Date > as.Date('2014-12-31'),]
+#Get A,D,H = 1,2,3 results
+test_results$Result <- ifelse(test_results$OT.SO != "", 2, ifelse(test_results$AG>test_results$HG, 1, 3)) 
+test_results<-as.vector(subset(test_results, select=c(Result)))
+```
+
+Now, we can start running the optimizer on our data sets to get our Dixon-Coles parameters. Recall that these are long processes. 
+```{r optimizer_no_xi, cache=TRUE}
+res_2015<-doDCPrediction(train_2015)
+res_long<-doDCPrediction(train_long)
+```
+
+Now with our res sets, we can evaulate the performance of each to the actual data. Instead of predicting a score, all we need to do is get the proportion of A,D,H for each game. We can recycle earlier code with a different return to get this information:
+
+```{r}
+getWinProp<-function(res, home, away, maxgoal=8){
+    attack.home<-paste("Attack",home,sep=".")
+    attack.away<-paste("Attack",away,sep=".")
+    defence.home<-paste("Defence",home,sep=".")
+    defence.away<-paste("Defence",away,sep=".")
+    
+    # Expected goals home
+    lambda <- exp(res$par['HOME'] + res$par[attack.home] + res$par[defence.away])
+    # Expected goals away
+    mu <- exp(res$par[attack.away] + res$par[defence.home])
+    
+    probability_matrix <- dpois(0:maxgoal, lambda) %*% t(dpois(0:maxgoal, mu))
+    
+    scaling_matrix <- matrix(tau(c(0,1,0,1), c(0,0,1,1), lambda, mu, res$par['RHO']), nrow=2)
+    probability_matrix[1:2, 1:2] <- probability_matrix[1:2, 1:2] * scaling_matrix
+ 
+    away_prob <- sum(probability_matrix[upper.tri(probability_matrix)])
+    draw_prob <- sum(diag(probability_matrix))
+    home_prob <- sum(probability_matrix[lower.tri(probability_matrix)])
+    
+    return(c(away_prob,draw_prob,home_prob))
+}
+
+getADHSeason<-function(schedule, res, maxgoal=8){
+    adh_results<-data.frame(A=NA,D=NA,H=NA)
+    for (game in 1:nrow(schedule)){
+        home<-as.character(schedule[game, "HomeTeam"])
+        away<-as.character(schedule[game, "AwayTeam"])
+        adh<-getWinProp(res, home, away, maxgoal=maxgoal)
+        adh_results<-rbind(adh_results, adh)
+    }
+    adh_results$A<-as.numeric(adh_results$A)
+    adh_results$D<-as.numeric(adh_results$D)
+    adh_results$H<-as.numeric(adh_results$H)
+    return(adh_results[2:nrow(adh_results),])
+}
+```
+
+We can get our ADH probability for the test data quite simply. We take it as a matrix to make it ready to feed into the rps function:
+```{r}
+adh_2015<-as.matrix(getADHSeason(test_schedule, res_2015, maxgoal=8))
+adh_all<-as.matrix(getADHSeason(test_schedule, res_long, maxgoal=8))
+
+rps_2015<-rps(unlist(test_results), adh_2015)
+rps_all<-rps(unlist(test_results), adh_all)
+```
+
+Now, lets look at the rps results to see how they compare. For 2015 only data in the model, our RPS value is `r rps_2015$rps`, and for all the available data, it's `r rps_all$rps`. Not a huge difference. But, lets' start adding in some $\xi$ values! Again, this is a long calculation
+
+```{r optimizer_xi, cache=TRUE}
+xi_choice=c(0.001, 0.015, 0.020, 0.025)
+
+rpslist<-vector("list", length(xi_choice))
+names(rpslist)<-lapply(xi_choice, function(x){paste("xi", x, sep=".")})
+
+for (i in 1:length(xi_choice)){
+    r<-doDCPrediction(train_2015, xi=xi_choice[i], currentDate=as.Date('2014-12-31'))
+    adh<-as.matrix(getADHSeason(test_schedule, r, maxgoal=8))
+    rpslist[paste("xi",xi_choice[i], sep=".")] <- rps(unlist(test_results), adh)
+}
+
+rpslist
+```
 

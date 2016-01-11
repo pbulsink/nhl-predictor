@@ -205,9 +205,9 @@ Montreal is a stronger team this year, we expect a higher attack and lower defen
 We'll do the addition to get $\lambda$ and $\mu$:
 ```{r}
 # Expected goals home
-lambda <- exp(res_2015$par['HOME'] + res_2015$par["Attack.Montreal Canadiens"] + res_2015$par["Defence.Montreal Canadiens"])
+lambda <- exp(res_2015$par['HOME'] + res_2015$par["Attack.Montreal Canadiens"] + res_2015$par["Defence.Toronto Maple Leafs"])
 # Expected goals away
-mu <- exp(res_2015$par["Attack.Toronto Maple Leafs"] + res_2015$par["Defence.Toronto Maple Leafs"])
+mu <- exp(res_2015$par["Attack.Toronto Maple Leafs"] + res_2015$par["Defence.Montreal Canadiens"])
 ```    
 
 Thus, we expect Montreal to score `r lambda` goals and Toronto to score `r mu` goals. 
