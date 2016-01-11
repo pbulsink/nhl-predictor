@@ -607,15 +607,41 @@ Now, lets look at the rps results to see how they compare. For 2015 only data in
 ```{r optimizer_xi, cache=TRUE}
 xi_choice=c(0.001, 0.015, 0.020, 0.025)
 
+get_rps_with_xi<-function(xi, train, schedule, result, currentDate=Sys.Date(), maxgoal=8){
+  r<-doDCPrediction(train, xi=xi, currentDate=currentDate)
+  adh<-as.matrix(getADHSeason(schedule, r, maxgoal=8))
+  return(rps(unlist(result), adh))
+}
+
 rpslist<-vector("list", length(xi_choice))
 names(rpslist)<-lapply(xi_choice, function(x){paste("xi", x, sep=".")})
 
 for (i in 1:length(xi_choice)){
-    r<-doDCPrediction(train_2015, xi=xi_choice[i], currentDate=as.Date('2014-12-31'))
-    adh<-as.matrix(getADHSeason(test_schedule, r, maxgoal=8))
-    rpslist[paste("xi",xi_choice[i], sep=".")] <- rps(unlist(test_results), adh)
+    rpslist[paste("xi",xi_choice[i], sep=".")] <- get_rps_with_xi(xi_choice[i], train_2015, test_schedule, test_results, currentDate=as.Date('2014-12-31'))
+}
+```
+
+Ok, we see that we get RPS values of `r unlist(rpslist)` for xi of `r xi_choice`. But can we optimize that better?
+
+```{r optimize_xi}
+opt_xi<-0
+```
+
+So we see that for the 2015 data only, we get an optimal xi value of `r opt_xi`. We can do optimization for the full data as well. You'll have to believe me when I say that the optimal xi value takes all night to elucidate, but it's XXXXX.
+
+Let's compare some more methods, to know how well this model really compares. We don't know if this RPS value is good or bad, so let's use some dummy data. If we use the '50-50' win method, our odds for each game are `{0.5,0,0.5}`. If we consider OT/SO results, we'll have approximately `{0.4,0.2,0.4}` for each game. the RPS for both is calculated. One final matrix of randomly generated proportions is tested too.
+
+```{r}
+rps_even_no_ot<-rps(unlist(test_results), (t(matrix(c(0.5,0,0.5), ncol=length(unlist(test_results)), nrow=3))))
+
+rps_even<-rps(unlist(test_results), (t(matrix(c(0.4,0.2,0.4), ncol=length(unlist(test_results)), nrow=3))))
+
+randFun <- function(n) {
+    m <- matrix(runif(3*n,0,1), ncol=3)
+    m<- sweep(m, 1, rowSums(m), FUN="/")
+    m
 }
 
-rpslist
+rps_rand<-rps_even_no_ot<-rps(unlist(test_results), randFun(n=length(unlist(test_results))))
 ```
 
