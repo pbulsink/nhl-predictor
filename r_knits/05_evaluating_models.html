@@ -153,30 +153,39 @@ rps_all &lt;- rps(unlist(test_results), adh_all)</code></pre>
 <p>Now, lets look at the rps results to see how they compare. For 2015 only data in the model, our RPS value is 0.2335377, and for all the available data, it’s 0.2334295. Not a huge difference. But, lets’ start adding in some <span class="math">\(\xi\)</span> values! Again, this is a long calculation</p>
 <pre class="r"><code>xi_choice = c(0.001, 0.015, 0.02, 0.025)
 
+get_rps_with_xi &lt;- function(xi, train, schedule, result, currentDate = Sys.Date(), 
+    maxgoal = 8) {
+    r &lt;- doDCPrediction(train, xi = xi, currentDate = currentDate)
+    adh &lt;- as.matrix(getADHSeason(schedule, r, maxgoal = 8))
+    return(rps(unlist(result), adh))
+}
+
 rpslist &lt;- vector(&quot;list&quot;, length(xi_choice))
 names(rpslist) &lt;- lapply(xi_choice, function(x) {
     paste(&quot;xi&quot;, x, sep = &quot;.&quot;)
 })
 
 for (i in 1:length(xi_choice)) {
-    r &lt;- doDCPrediction(train_2015, xi = xi_choice[i], currentDate = as.Date(&quot;2014-12-31&quot;))
-    adh &lt;- as.matrix(getADHSeason(test_schedule, r, maxgoal = 8))
-    rpslist[paste(&quot;xi&quot;, xi_choice[i], sep = &quot;.&quot;)] &lt;- rps(unlist(test_results), 
-        adh)
+    rpslist[paste(&quot;xi&quot;, xi_choice[i], sep = &quot;.&quot;)] &lt;- get_rps_with_xi(xi_choice[i], 
+        train_2015, test_schedule, test_results, currentDate = as.Date(&quot;2014-12-31&quot;))
+}</code></pre>
+<p>Ok, we see that we get RPS values of 0.2338889, 0.2335121, 0.233466, 0.2335415 for xi of 0.001, 0.015, 0.02, 0.025. But can we optimize that better?</p>
+<pre class="r"><code>opt_xi &lt;- 0</code></pre>
+<p>So we see that for the 2015 data only, we get an optimal xi value of 0. We can do optimization for the full data as well. You’ll have to believe me when I say that the optimal xi value takes all night to elucidate, but it’s XXXXX.</p>
+<p>Let’s compare some more methods, to know how well this model really compares. We don’t know if this RPS value is good or bad, so let’s use some dummy data. If we use the ‘50-50’ win method, our odds for each game are <code>{0.5,0,0.5}</code>. If we consider OT/SO results, we’ll have approximately <code>{0.4,0.2,0.4}</code> for each game. the RPS for both is calculated. One final matrix of randomly generated proportions is tested too.</p>
+<pre class="r"><code>rps_even_no_ot &lt;- rps(unlist(test_results), (t(matrix(c(0.5, 0, 0.5), ncol = length(unlist(test_results)), 
+    nrow = 3))))
+
+rps_even &lt;- rps(unlist(test_results), (t(matrix(c(0.4, 0.2, 0.4), ncol = length(unlist(test_results)), 
+    nrow = 3))))
+
+randFun &lt;- function(n) {
+    m &lt;- matrix(runif(3 * n, 0, 1), ncol = 3)
+    m &lt;- sweep(m, 1, rowSums(m), FUN = &quot;/&quot;)
+    m
 }
 
-rpslist</code></pre>
-<pre><code>## $xi.0.001
-## [1] 0.2338889
-## 
-## $xi.0.015
-## [1] 0.2335121
-## 
-## $xi.0.02
-## [1] 0.233466
-## 
-## $xi.0.025
-## [1] 0.2335415</code></pre>
+rps_rand &lt;- rps_even_no_ot &lt;- rps(unlist(test_results), randFun(n = length(unlist(test_results))))</code></pre>
 
 
 </div>

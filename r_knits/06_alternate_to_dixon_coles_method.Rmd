@@ -1,5 +1,5 @@
 ---
-title: "06 An Alternate Dixon Coles Method"
+title: "06 An Alternate To Dixon Coles Method"
 author: "Philip Bulsink"
 date:
 output: html_document
