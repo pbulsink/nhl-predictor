@@ -358,13 +358,13 @@ Remaking those functions took a lot of space, but only a few lines changed. We m
 
 ```{r xi_all_res, warning=FALSE, cache=TRUE, echo=FALSE}
 t<-proc.time()
-nhl.all.res<-doDCPrediction(nhl_all, xi=0.005)
+nhl_all_res<-doDCPrediction(nhl_all, xi=0.005)
 t_all_calc<-proc.time()-t
 ```
 
 ```{r xi_one_res, warning=FALSE, cache=TRUE, echo=FALSE}
 t<-proc.time()
-nhl.one.res<-doDCPrediction(nhl2015, xi=0.005)
+nhl_one_res<-doDCPrediction(nhl2015, xi=0.005)
 t_one_calc<-proc.time()-t
 ```
 
@@ -372,11 +372,11 @@ Running it again, we get 10 seasons taking `r as.integer(t_all_calc[3])` seconds
 
 We'll plot the Attack and Defence parameters for each team to se if there's any correllation.
 ```{r attack_defence_corr_plot, cache=TRUE, echo=FALSE}
-team_params<-data.frame("Team"=nhl_teams, "Attack"=0, "Defence"=0)
+team_params<-data.frame("Team"=unique(nhl2015$AwayTeam), "Attack"=0, "Defence"=0)
 for (t in 1:length(as.character(unique(nhl2015$AwayTeam)))){
      team<-as.character(unique(nhl2015$AwayTeam))[t]
-     team_params[team_params$Team == team,]$Attack=res_2015$par[paste("Attack", team, sep=".")]
-     team_params[team_params$Team == team,]$Defend=res_2015$par[paste("Defence", team, sep=".")]
+     team_params[team_params$Team == team,]$Attack=nhl_one_res$par[paste("Attack", team, sep=".")]
+     team_params[team_params$Team == team,]$Defend=nhl_one_res$par[paste("Defence", team, sep=".")]
 }
 
 ggplot(team_params, aes(x=Attack, y=Defence, color=Team)) +
