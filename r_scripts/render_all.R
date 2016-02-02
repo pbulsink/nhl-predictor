@@ -7,4 +7,5 @@ render_all<-function(){
     rmarkdown::render("./r_knits/04_simulating_a_season.Rmd")
     rmarkdown::render("./r_knits/05_evaluating_models.Rmd")
     rmarkdown::render("./r_knits/06_alternate_to_dixon_coles_method.Rmd")
+    rmarkdown::render("./r_knits/07_bayesian_analysis_of_hockey.Rmd")
 }

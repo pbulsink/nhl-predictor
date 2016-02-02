@@ -11,7 +11,7 @@ knitr::opts_chunk$set(fig.width=12, fig.height=8, fig.path='Figs/',
 set.seed(1)
 ```
 
-```{r echo=FALSE, cache=TRUE, warning=FALSE}
+```{r echo=FALSE, cache=TRUE, warning=FALSE, cache.extra=tools::md5sum('../data/leagues_NHL_2016_games_games.csv')}
 #Import data 
 otTagger<-function(row) {
   if (row['OT.SO'] != '') {
@@ -80,7 +80,7 @@ Last entry we did some data importing and cleaning of historical NHL data, from 
 
 First, Dixon and Coles provide a method to increase the number of low-goal scoring games. A keen eye would notice that the goals scored is a bit biased 'left' compared to the actual Poisson curve:
 
-```{r goals_vs_poisson_plot, echo=FALSE, cache=TRUE}
+```{r goals_vs_poisson_plot, echo=FALSE, cache=TRUE, cache.extra=tools::md5sum('../data/leagues_NHL_2016_games_games.csv')}
 library(ggplot2)
 goals<-data.frame("Goals"=as.integer(nhl_all$AG))
 goals$Goals<-cbind(goals$Goals, as.integer(nhl_all$HG))
@@ -213,13 +213,13 @@ doDCPrediction<-function(df){
 Use of this is to feed in the data into the `doDCPrediction` function, returning the `res` parameter object. This is a long calculation. We'll use this result to simulate an actual game in the next post.
 
 
-```{r all_res, warning=FALSE, cache=TRUE, echo=FALSE}
+```{r all_res, warning=FALSE, cache=TRUE, echo=FALSE, cache.extra=tools::md5sum('../data/leagues_NHL_2016_games_games.csv')}
 t<-proc.time()
 nhl.all.res<-doDCPrediction(nhl_all)
 t_all_calc<-proc.time()-t
 ```
 
-```{r one_res, warning=FALSE, cache=TRUE, echo=FALSE}
+```{r one_res, warning=FALSE, cache=TRUE, echo=FALSE, cache.extra=tools::md5sum('../data/leagues_NHL_2016_games_games.csv')}
 t<-proc.time()
 nhl.one.res<-doDCPrediction(nhl2015)
 t_one_calc<-proc.time()-t
@@ -241,7 +241,7 @@ DCweights <- function(dates, currentDate=Sys.Date(), xi=0){
 
 We can see the effect this has by throwing the list of dates from our scores into the function, with different values of $\xi$.
 
-```{r xi_plot, cache=TRUE, echo=FALSE}
+```{r xi_plot, cache=TRUE, echo=FALSE, cache.extra=tools::md5sum('../data/leagues_NHL_2016_games_games.csv')}
 #Turn this into a shiny app
 library(reshape2)
 xi_list<-c(0.0001, 0.001, 0.002, 0.003, 0.005, 0.01, 0.03, 0.05, 0.1, 0.3)
@@ -357,13 +357,13 @@ doDCPrediction<-function(df, xi=0){
 
 Remaking those functions took a lot of space, but only a few lines changed. We multiply the log likelyhood function by weights, and the remainder is to bring the calculated weights from the user through the model. 
 
-```{r xi_all_res, warning=FALSE, cache=TRUE, echo=FALSE}
+```{r xi_all_res, warning=FALSE, cache=TRUE, echo=FALSE, cache.extra=tools::md5sum('../data/leagues_NHL_2016_games_games.csv')}
 t<-proc.time()
 nhl_all_res<-doDCPrediction(nhl_all, xi=0.005)
 t_all_calc<-proc.time()-t
 ```
 
-```{r xi_one_res, warning=FALSE, cache=TRUE, echo=FALSE}
+```{r xi_one_res, warning=FALSE, cache=TRUE, echo=FALSE, cache.extra=tools::md5sum('../data/leagues_NHL_2016_games_games.csv')}
 t<-proc.time()
 nhl_one_res<-doDCPrediction(nhl2015, xi=0.005)
 t_one_calc<-proc.time()-t
@@ -372,7 +372,7 @@ t_one_calc<-proc.time()-t
 Running it again, we get 10 seasons taking `r as.integer(t_all_calc[3])` seconds, and one season `r as.integer(t_one_calc[3])` seconds. Just a little longer, as we expected.. We could optimize that futher if we wanted (eg. drop data for weight of less than some amount), but fortunately we only have to run this once to start predicting all sorts of results.
 
 We'll plot the Attack and Defence parameters for each team to se if there's any correllation.
-```{r attack_defence_corr_plot, cache=TRUE, echo=FALSE}
+```{r attack_defence_corr_plot, cache=TRUE, echo=FALSE, cache.extra=tools::md5sum('../data/leagues_NHL_2016_games_games.csv')}
 team_params<-data.frame("Team"=unique(nhl2015$AwayTeam), "Attack"=0, "Defence"=0)
 for (t in 1:length(as.character(unique(nhl2015$AwayTeam)))){
      team<-as.character(unique(nhl2015$AwayTeam))[t]

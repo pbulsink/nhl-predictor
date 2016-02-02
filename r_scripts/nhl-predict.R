@@ -600,9 +600,9 @@ test_results<-data_2015[data_2015$Date > as.Date('2014-12-31'),]
 test_results$Result <- ifelse(test_results$OT.SO != "", 2, ifelse(test_results$AG>test_results$HG, 1, 3)) 
 test_results<-as.vector(subset(test_results, select=c(Result)))
 
-min_xi<-function(xi, train, schedule){
-    res<-doCMPrediction(train, xi=xi, currentDate=as.Date('2014-12-31'))
+min_xi<-function(x, train, schedule){
+    res<-doDCPrediction(train, xi=x, currentDate=as.Date('2014-12-31'))
     adh<-as.matrix(getADHSeason(schedule, res, maxgoal=8))
     rps<-rps(unlist(test_results), adh)
-    return(rps[1])
+    return(unlist(rps[1]))
 }

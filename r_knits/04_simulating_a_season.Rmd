@@ -9,7 +9,7 @@ knitr::opts_chunk$set(fig.width=12, fig.height=8, fig.path='Figs/',
                       warning=FALSE, message=FALSE, tidy=TRUE)
 set.seed(1)
 ```
-```{r prep_chunk, echo=FALSE, cache=TRUE, warning=FALSE}
+```{r prep_chunk, echo=FALSE, cache=TRUE, warning=FALSE, cache.extra=tools::md5sum('../data/leagues_NHL_2016_games_games.csv')}
 #Import data 
 otTagger<-function(row) {
   if (row['OT.SO'] != '') {
@@ -397,7 +397,7 @@ predictScore<-function(res, stats, home, away, maxgoal=8){
 ```
 
 Before we go predicting games, we need to have a list of things to predict. Taking the most recent season (2015-2016), we'll strip out all the games after today:
-```{r cache=TRUE}
+```{r cache=TRUE, cache.extra=tools::md5sum('../data/leagues_NHL_2016_games_games.csv')}
 nhlFutureGames<-function(df){
     df<-df[,c('Date','Visitor','G','Home','G.1')]
     df$Date<-as.Date(df$Date)
@@ -476,12 +476,12 @@ simulateSeason<-function(res, schedule, stats, past_results, n=10000, maxgoal=8)
 ```
 
 We can predict the season's remaining games, to figure out what chances our favourite team has of finishing in any position! We'll start with the nhl2016 data only, with no time weighting.
-```{r poisson_2016, cache=TRUE}
+```{r poisson_2016, cache=TRUE, cache.extra=tools::md5sum('../data/leagues_NHL_2016_games_games.csv')}
 res_2016<-doDCPrediction(nhl2016)
 ```
 
 If we do that once, we can get a nice stats table, as we'd find on the NHL website:
-```{r predict_remainder, cache=TRUE}
+```{r predict_remainder, cache=TRUE, cache.extra=tools::md5sum('../data/leagues_NHL_2016_games_games.csv')}
 remainder_2016<-predictRemainderOfSeason(res_2016, future_games, nhl_2016_stats)
 all_results<-rbind(nhl2016, remainder_2016)
 stats_sim_2016<-makeStatsTable(all_results)
@@ -490,7 +490,7 @@ kable(stats_sim_2016[,1:10])
 
 But, while doing that once is cool, we need to do that over and over again to really get a picture of the chance each team has of making the playoffs by the end of the season. This we'll do with `n=1000`, to save time.
 
-```{r predict_seasons, cache=TRUE}
+```{r predict_seasons, cache=TRUE, cache.extra=tools::md5sum('../data/leagues_NHL_2016_games_games.csv')}
 nhl_2016_predicted_standings<-simulateSeason(res_2016, future_games, nhl_2016_stats, past_results=nhl2016, n=1000)
 kable(nhl_2016_predicted_standings)
 ```
