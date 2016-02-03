@@ -480,7 +480,8 @@ We can predict the season's remaining games, to figure out what chances our favo
 res_2016<-doDCPrediction(nhl2016)
 ```
 
-If we do that once, we can get a nice stats table, as we'd find on the NHL website:
+If we do that once, we can get a nice stats table, as we'd find on the NHL website. Note that some games were cancelled for a snowstorm in January and may not have been rescheduled yet, so their teams may have less games played.
+
 ```{r predict_remainder, cache=TRUE, cache.extra=tools::md5sum('../data/leagues_NHL_2016_games_games.csv')}
 remainder_2016<-predictRemainderOfSeason(res_2016, future_games, nhl_2016_stats)
 all_results<-rbind(nhl2016, remainder_2016)
@@ -556,7 +557,6 @@ All we need to do is feed the standings table from the predictions to the `getCo
 From our calculations, we can see that the Eastern Conference standings are likely as follows:
 
 ```{r echo=FALSE}
-library(knitr)
 east_standings<-getConferenceStandings(nhl_2016_predicted_standings, "East")
 kable(east_standings)
 ```
@@ -570,6 +570,19 @@ west_standings<-getConferenceStandings(nhl_2016_predicted_standings, "West")
 kable(west_standings)
 ```
 
+The interesting things are: chances of president's trophy and chances to make playoffs.
+
+We can get this info quite simply.
+
+```{r}
+results<-data.frame('Presidents'=rep(0, times=length(nhl_2016_predicted_standings)), 'Playoffs'=0)
+rownames(results)<-nhl_2016_predicted_standings$Team
+
+for i in length(results$Team){
+  results[,Team]
+}
+```
+
 Next time we'll evaluate the performance of the different models and validate our predictions!
 
-* Note that there is a tiebreaker not currently built in whereby head to head results matter for two tied teams. This isn't usually required for playoff make or break decisions.
+* Note that there is a tiebreaker not currently built in whereby head to head results matter for two tied teams. This isn't usually required for playoff make or break decisions, particularly in a monte-carlo prediction.
