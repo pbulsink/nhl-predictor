@@ -163,7 +163,7 @@ doDCPrediction<-function(df, xi=0, currentDate=Sys.Date()){
                           paste('Attack', dcm$teams[1:(nteams-1)], sep='.'),
                           paste('Defence', dcm$teams, sep='.'))
     
-    res <- optim(par=par.inits, fn=DCoptimFn, DCm=dcm, xi=xi, currentDate=currentDate, method='BFGS')
+    res <- optim(par=par.inits, fn=DCoptimFn, DCm=dcm, xi=xi, currentDate=currentDate, method='Nelder-Mead')
     
     parameters <- res$par
     
@@ -535,7 +535,7 @@ CMlogLik <- function(y1, y2, lambda, mu, rho=0, sigma=1, weights=NULL){
     #rho=0, independence
     #y1 home goals
     #y2 away goals
-    sig<-10^sigma #Optimizing to log sigma to keep it positive. I'll have to compare this to limiting sigma with method="L-BFGS-B" lower=c(-Inf, -Inf, 0, rep(-Inf, length(params)-3))
+    sig<-10^sigma #Optimizing to log sigma to keep it positive. I'll have to compare this to limiting sigma with method="L-Nelder-Mead-B" lower=c(-Inf, -Inf, 0, rep(-Inf, length(params)-3))
     lam<-lambda^sigma
     muu<-mu^sigma
     loglik <- log(tau(y1, y2, lambda, mu, rho)) + log(dcomp(y1, lam, sig)) + log(dcomp(y2, muu, sig))
@@ -585,7 +585,7 @@ doCMPrediction<-function(df, xi=0, currentDate=Sys.Date()){
                           paste('Attack', dcm$teams[1:(nteams-1)], sep='.'),
                           paste('Defence', dcm$teams, sep='.'))
     
-    res <- optim(par=par.inits, fn=CMoptimFn, DCm=dcm, xi=xi, currentDate=currentDate, method='BFGS')
+    res <- optim(par=par.inits, fn=CMoptimFn, DCm=dcm, xi=xi, currentDate=currentDate, method='Nelder-Mead')
     # There is a glm.comp function
     
     parameters <- res$par

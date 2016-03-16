@@ -72,7 +72,7 @@ img {
 <pre class="r"><code>library(CompGLM)
 CMlogLik &lt;- function(y1, y2, lambda, mu, rho = 0, sigma = 1, weights = NULL) {
     # rho=0, independence y1 home goals y2 away goals
-    sig &lt;- 10^sigma  #Optimizing to log sigma to keep it positive. I'll have to compare this to limiting sigma with method='L-BFGS-B' lower=c(-Inf, -Inf, 0, rep(-Inf, length(params)-3))
+    sig &lt;- 10^sigma  #Optimizing to log sigma to keep it positive. I'll have to compare this to limiting sigma with method='L-Nelder-Mead-B' lower=c(-Inf, -Inf, 0, rep(-Inf, length(params)-3))
     lam &lt;- lambda^sigma
     muu &lt;- mu^sigma
     loglik &lt;- log(tau(y1, y2, lambda, mu, rho)) + log(dcomp(y1, lam, sig)) + 
@@ -121,7 +121,7 @@ doCMPrediction &lt;- function(df, xi = 0, currentDate = Sys.Date()) {
         1)], sep = &quot;.&quot;), paste(&quot;Defence&quot;, dcm$teams, sep = &quot;.&quot;))
     
     res &lt;- optim(par = par.inits, fn = CMoptimFn, DCm = dcm, xi = xi, currentDate = currentDate, 
-        method = &quot;BFGS&quot;)
+        method = &quot;Nelder-Mead&quot;)
     # There is a glm.comp function
     
     parameters &lt;- res$par

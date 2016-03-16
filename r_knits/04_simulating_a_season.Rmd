@@ -163,7 +163,7 @@ doDCPrediction<-function(df, xi=0){
                           paste('Attack', dcm$teams[1:(nteams-1)], sep='.'),
                           paste('Defence', dcm$teams, sep='.'))
     
-    res <- optim(par=par.inits, fn=DCoptimFn, DCm=dcm, xi=xi, method='BFGS')
+    res <- optim(par=par.inits, fn=DCoptimFn, DCm=dcm, xi=xi, method='Nelder-Mead')
     
     parameters <- res$par
     

@@ -150,7 +150,7 @@ adh_all &lt;- as.matrix(getADHSeason(test_schedule, res_long, maxgoal = 8))
 
 rps_2015 &lt;- rps(unlist(test_results), adh_2015)
 rps_all &lt;- rps(unlist(test_results), adh_all)</code></pre>
-<p>Now, lets look at the rps results to see how they compare. For 2015 only data in the model, our RPS value is 0.2335377, and for all the available data, it’s 0.2334295. Not a huge difference. But, lets’ optimize the xi value by using RPS.</p>
+<p>Now, lets look at the rps results to see how they compare. For 2015 only data in the model, our RPS value is 0.250604, and for all the available data, it’s 0.2441252. Not a huge difference. But, lets’ optimize the xi value by using RPS.</p>
 <pre class="r"><code>min_xi &lt;- function(x, train, schedule) {
     res &lt;- doDCPrediction(train, xi = x, currentDate = as.Date(&quot;2014-12-31&quot;))
     adh &lt;- as.matrix(getADHSeason(schedule, res, maxgoal = 8))
@@ -159,7 +159,7 @@ rps_all &lt;- rps(unlist(test_results), adh_all)</code></pre>
 }
 
 opt_xi &lt;- optimize(min_xi, lower = 0, upper = 0.05, train = train_2015, schedule = test_schedule)</code></pre>
-<p>So we see that for the 2015 data only, we get an optimal xi value of 0.0181408, 0.233462. We can do optimization for the full data as well. You’ll have to believe me when I say that the optimal xi value takes all night to elucidate, but it’s XXXXX.</p>
+<p>So we see that for the 2015 data only, we get an optimal xi value of 0.0393049, 0.248933. We can do optimization for the full data as well. You’ll have to believe me when I say that the optimal xi value takes all night to elucidate, but it’s XXXXX.</p>
 <p>Let’s compare some more methods, to know how well this model really compares. We don’t know if this RPS value is good or bad, so let’s use some dummy data. If the home team wins every game, our odds are <code>{0,0,1}</code>. If we use the ‘50-50’ win method, our odds for each game are <code>{0.5,0,0.5}</code>. If we consider OT/SO results, we’ll have approximately <code>{0.4,0.2,0.4}</code> for each game. the RPS for both is calculated. One final matrix of randomly generated proportions is tested too.</p>
 <pre class="r"><code>rps_home &lt;- rps(unlist(test_results), (t(matrix(c(0, 0, 1), ncol = length(unlist(test_results)), 
     nrow = 3))))
