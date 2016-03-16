@@ -8,6 +8,7 @@ output: html_document
 knitr::opts_chunk$set(fig.width=12, fig.height=8, fig.path='Figs/',
                       warning=FALSE, message=FALSE, tidy=TRUE)
 set.seed(1)
+library(knitr)
 ```
 ```{r prep_chunk, echo=FALSE, cache=TRUE, warning=FALSE, cache.extra=tools::md5sum('../data/leagues_NHL_2016_games_games.csv')}
 #Import data 
@@ -300,11 +301,11 @@ makeStatsTable<-function(df) {
     tmpTable$HomeOTW = as.numeric(table(df$HomeTeam[(df$OT.Win == "H") & (df$OT.SO == "OT")]))
     tmpTable$HomeSOW = as.numeric(table(df$HomeTeam[(df$OT.Win == "H") & (df$OT.SO == "SO")]))
 
-    tmpTable$AwayOTW = as.numeric(table(df$AwayTeam[(df$OT.Win == "V") & (df$OT.SO == "OT")]))
-    tmpTable$AwaySOW = as.numeric(table(df$AwayTeam[(df$OT.Win == "V") & (df$OT.SO == "SO")]))
+    tmpTable$AwayOTW = as.numeric(table(df$AwayTeam[(df$OT.Win == "A") & (df$OT.SO == "OT")]))
+    tmpTable$AwaySOW = as.numeric(table(df$AwayTeam[(df$OT.Win == "A") & (df$OT.SO == "SO")]))
     
     #OT Losses
-    tmpTable$HomeOTL = as.numeric(table(df$HomeTeam[(df$OT.Win == "V")]))
+    tmpTable$HomeOTL = as.numeric(table(df$HomeTeam[(df$OT.Win == "A")]))
     tmpTable$AwayOTL = as.numeric(table(df$AwayTeam[(df$OT.Win == "H")]))
     
     #W/L/OTL/ROW
@@ -448,7 +449,7 @@ predictRemainderOfSeason<-function(res, schedule, stats, maxgoal=8){
             else{
                 schedule[game, "HG"]<-score[1]
                 schedule[game, "AG"]<-score[1]
-                schedule[game, "OT.Win"]<-"V"
+                schedule[game, "OT.Win"]<-"A"
             }
         }
         else{
@@ -473,6 +474,11 @@ simulateSeason<-function(res, schedule, stats, past_results, n=10000, maxgoal=8)
     }
     return(standings)
 }
+```
+
+For the record, here's where teams are now:
+```{r current_standings, echo=FALSE}
+kable(nhl_2016_stats[,1:10])
 ```
 
 We can predict the season's remaining games, to figure out what chances our favourite team has of finishing in any position! We'll start with the nhl2016 data only, with no time weighting.
@@ -570,18 +576,46 @@ west_standings<-getConferenceStandings(nhl_2016_predicted_standings, "West")
 kable(west_standings)
 ```
 
-The interesting things are: chances of president's trophy and chances to make playoffs.
+It'd look cleaner (and be better for sorting) to average the points each team recieves (and keep the variance around for good measure). 
+
+```{r echo=TRUE, cache=TRUE, cache.extra=tools::md5sum('../data/leagues_NHL_2016_games_games.csv')}
+new_stdev<-function(stdev, mean, pop, new_val){
+    new_mean = (mean*pop + new_val)/(pop+1)
+    return(sqrt((((pop-2)*stdev^2) + (new_val - new_mean)*(new_val-mean))/(pop-1)))
+}
+
+point_predict<-function(res, schedule, stats, past_results, n=10000, maxgoal=8){
+    pp<-matrix(0, nrow=length(unique(stats$Team)), ncol=4)
+    rownames(pp)<-sort(unique(stats$Team))
+    colnames(pp)<-c('Points', 'StDev', 'Playoffs', 'Presidents')
+    sims=0
+    scores<-predictRemainderOfSeason(res=res, schedule=schedule, stats=stats, maxgoal=maxgoal)
+    stats_table<-makeStatsTable(rbind(past_results, scores))
+    sims=1
+    pp[,1]<-stats_table$P
+    
+    for (i in 2:n){
+        scores<-predictRemainderOfSeason(res=res, schedule=schedule, stats=stats, maxgoal=maxgoal)
+        stats_table<-makeStatsTable(rbind(past_results, scores))
+        sims = sims +1
+        
+    }
+    return(pp)
+}
+```
+
+The interesting things are: chances of president's trophy and chances to make playoffs. 
 
 We can get this info quite simply.
 
-```{r}
+``{r}
 results<-data.frame('Presidents'=rep(0, times=length(nhl_2016_predicted_standings)), 'Playoffs'=0)
-rownames(results)<-nhl_2016_predicted_standings$Team
+rownames(results)<-rownames(nhl_2016_predicted_standings)
 
-for i in length(results$Team){
+for (i in 1:length(rownames(results))){
   results[,Team]
 }
-```
+``
 
 Next time we'll evaluate the performance of the different models and validate our predictions!
 
