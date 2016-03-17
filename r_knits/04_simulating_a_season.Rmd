@@ -584,30 +584,29 @@ new_stdev<-function(stdev, mean, pop, new_val){
     return(sqrt((((pop-2)*stdev^2) + (new_val - new_mean)*(new_val-mean))/(pop-1)))
 }
 
+v_new_stdev<-Vectorize(new_stdev, c('stdev','mean', 'new_val'))
+
 point_predict<-function(res, schedule, stats, past_results, n=10000, maxgoal=8){
-    pp<-matrix(0, nrow=length(unique(stats$Team)), ncol=4)
+    pp<-matrix(0, nrow=length(unique(stats$Team)), ncol=6)
     rownames(pp)<-sort(unique(stats$Team))
-    colnames(pp)<-c('Points', 'StDev', 'Playoffs', 'Presidents')
-    sims=0
+    colnames(pp)<-c('Points', 'Point_StDev', 'Playoffs', 'Playoffs_StDev' 'Presidents', 'Presidents_StDev')
+
     scores<-predictRemainderOfSeason(res=res, schedule=schedule, stats=stats, maxgoal=maxgoal)
     stats_table<-makeStatsTable(rbind(past_results, scores))
     standings<-buildStandingsTable(stats_table)
-    east_standings<-getConferenceStandings(standings, "East")[1:8,]
-    west_standings<-getConferenceStandings(standings, "West")[1:8,]
-    sims=1
     pp[,"Points"]<-stats_table[order(stats_table$Team),]$P
-    pp[rownames(east_standings),"Playoffs"]<-1
-    pp[rownames(west_standings),"Playoffs"]<-1
-    #table for playoffs from east_ and west_ standings
+    pp[rownames(getConferenceStandings(standings, "East")[1:8,]),"Playoffs"]<-1
+    pp[rownames(getConferenceStandings(standings, "West")[1:8,]),"Playoffs"]<-1
     pp[names(which(standings[,"1"] == 1, arr.ind = TRUE)),"Presidents"]<-1
     
+        sims=1
     
-#     for (i in 2:n){
-#         scores<-predictRemainderOfSeason(res=res, schedule=schedule, stats=stats, maxgoal=maxgoal)
-#         stats_table<-makeStatsTable(rbind(past_results, scores))
-#         sims = sims +1
-#         
-#     }
+    for (i in 2:n){
+        scores<-predictRemainderOfSeason(res=res, schedule=schedule, stats=stats, maxgoal=maxgoal)
+        stats_table<-makeStatsTable(rbind(past_results, scores))
+        sims = sims + 1
+        
+    }
     return(pp)
 }
 ```
