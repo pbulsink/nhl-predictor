@@ -591,15 +591,23 @@ point_predict<-function(res, schedule, stats, past_results, n=10000, maxgoal=8){
     sims=0
     scores<-predictRemainderOfSeason(res=res, schedule=schedule, stats=stats, maxgoal=maxgoal)
     stats_table<-makeStatsTable(rbind(past_results, scores))
+    standings<-buildStandingsTable(stats_table)
+    east_standings<-getConferenceStandings(standings, "East")[1:8,]
+    west_standings<-getConferenceStandings(standings, "West")[1:8,]
     sims=1
-    pp[,1]<-stats_table$P
+    pp[,"Points"]<-stats_table[order(stats_table$Team),]$P
+    pp[rownames(east_standings),"Playoffs"]<-1
+    pp[rownames(west_standings),"Playoffs"]<-1
+    #table for playoffs from east_ and west_ standings
+    pp[names(which(standings[,"1"] == 1, arr.ind = TRUE)),"Presidents"]<-1
     
-    for (i in 2:n){
-        scores<-predictRemainderOfSeason(res=res, schedule=schedule, stats=stats, maxgoal=maxgoal)
-        stats_table<-makeStatsTable(rbind(past_results, scores))
-        sims = sims +1
-        
-    }
+    
+#     for (i in 2:n){
+#         scores<-predictRemainderOfSeason(res=res, schedule=schedule, stats=stats, maxgoal=maxgoal)
+#         stats_table<-makeStatsTable(rbind(past_results, scores))
+#         sims = sims +1
+#         
+#     }
     return(pp)
 }
 ```
