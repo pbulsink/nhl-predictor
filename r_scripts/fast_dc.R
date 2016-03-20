@@ -41,3 +41,4 @@ fast.DC.predict<-function(m,res,home,away,maxgoal=7){
     
     return(c(HomeWinProbability,DrawProbability,AwayWinProbability))
 }
+

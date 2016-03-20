@@ -19,7 +19,7 @@ DClogLik <- function(y1, y2, lambda, mu, rho=0){
 DCmodelData <- function(df){
     
     hm <- model.matrix(~ HomeTeam - 1, data=df, contrasts.arg=list(HomeTeam='contr.treatment'))
-    am <- model.matrix(~ AwayTeam -1, data=df)
+    am <- model.matrix(~ AwayTeam - 1, data=df)
     
     team.names <- unique(c(levels(df$HomeTeam), levels(df$AwayTeam)))
     

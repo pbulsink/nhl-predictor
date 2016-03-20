@@ -99,11 +99,11 @@ ggplot(prand_goals, aes(Goals, fill = Type)) +
 
 The Dixon-Coles method for adjusting for low scoring games is the tau ($\tau$) function, which we'll use in a bit.
 ```{r}
-tau <- Vectorize(function(xx, yy, lambda, mu, rho){
-    if (xx == 0 & yy == 0){return(1 - (lambda*mu*rho))
-    } else if (xx == 0 & yy == 1){return(1 + (lambda*rho))
-    } else if (xx == 1 & yy == 0){return(1 + (mu*rho))
-    } else if (xx == 1 & yy == 1){return(1 - rho)
+tau <- Vectorize(function(y1, y2, lambda, mu, rho){
+    if (y1 == 0 & y2 == 0){return(1 - (lambda*mu*rho))
+    } else if (y1 == 0 & y2 == 1){return(1 + (lambda*rho))
+    } else if (y1 == 1 & y2 == 0){return(1 + (mu*rho))
+    } else if (y1 == 1 & y2 == 1){return(1 - rho)
     } else {return(1)}
 })
 ```
@@ -123,7 +123,7 @@ These two functions are used below, when setting up the model to be optimized, a
 
 ```{r}
 DCmodelData <- function(df){
-    
+   
     team.names <- unique(c(levels(df$HomeTeam), levels(df$AwayTeam)))
     
     # attack, with sum-to-zero constraint
@@ -142,9 +142,9 @@ DCmodelData <- function(df){
     am.d <- model.matrix(~ AwayTeam -1, data=df)
     
     return(list(homeTeamDMa=hm.a, homeTeamDMd=hm.d,
-                awayTeamDMa=am.a, awayTeamDMd=am.d,
-                homeGoals=df$HG, awayGoals=df$AG,
-                teams=team.names)) 
+        awayTeamDMa=am.a, awayTeamDMd=am.d,
+        homeGoals=df$HG, awayGoals=df$AG,
+        teams=team.names)) 
 }
 
 DCoptimFn <- function(params, DCm){
@@ -155,10 +155,11 @@ DCoptimFn <- function(params, DCm){
     nteams <- length(DCm$teams)
     attack.p <- matrix(params[3:(nteams+1)], ncol=1) #one column less
     defence.p <- matrix(params[(nteams+2):length(params)], ncol=1) 
-    
+      
     # need to multiply with the correct matrices
     lambda <- exp(DCm$homeTeamDMa %*% attack.p + DCm$awayTeamDMd %*% defence.p + home.p)
     mu <- exp(DCm$awayTeamDMa %*% attack.p + DCm$homeTeamDMd %*% defence.p)
+
     
     return(
         DClogLik(y1=DCm$homeGoals, y2=DCm$awayGoals, lambda, mu, rho.p) * -1
@@ -175,7 +176,7 @@ doDCPrediction<-function(df){
     
     #dummy fill parameters
     #initial parameter estimates
-    attack.params <- rep(.1, times=nteams-1) # one less parameter
+    attack.params <- rep(0.1, times=nteams-1) # one less parameter
     defence.params <- rep(-0.8, times=nteams)
     home.param <- 0.06
     rho.init <- 0.03
@@ -187,12 +188,12 @@ doDCPrediction<-function(df){
                           paste('Attack', dcm$teams[1:(nteams-1)], sep='.'),
                           paste('Defence', dcm$teams, sep='.'))
     
-    res <- optim(par=par.inits, fn=DCoptimFn, DCm=dcm, method='Nelder-Mead')
+    res <- optim(par=par.inits, fn=DCoptimFn, DCm=dcm, method='BFGS')
     
     parameters <- res$par
     
     #compute last team attack parameter
-    missing.attack <- sum(parameters[3:(nteams+1)]) * -1
+    missing.attack <- sum(parameters[3:(nteams-1)]) * -1
     
     #put it in the parameters vector
     parameters <- c(parameters[1:(nteams+1)], missing.attack, parameters[(nteams+2):length(parameters)])
@@ -225,8 +226,24 @@ nhl.one.res<-doDCPrediction(nhl2015)
 t_one_calc<-proc.time()-t
 ```
 
-The full 10 seasons took `r as.integer(t_all_calc[3])` seconds, while even just one season took `r as.integer(t_one_calc[3])` seconds. We haven't even added in the promised time dependancy yet! WOW. Hopefully it's a good model. 
+The full 10 seasons took `r as.integer(t_all_calc[3])` seconds, while even just one season took `r as.integer(t_one_calc[3])` seconds. We haven't even added in the promised time dependancy yet! WOW. Hopefully it's a good model.
 
+We'll plot the Attack and Defence parameters for each team to se if there's any correllation.
+```{r attack_defence_corr_plot, cache=TRUE, echo=FALSE, cache.extra=tools::md5sum('../data/leagues_NHL_2016_games_games.csv')}
+library(ggplot2)
+team_params<-data.frame("Team"=unique(nhl2015$AwayTeam), "Attack"=0, "Defence"=0)
+for (t in 1:length(as.character(unique(nhl2015$AwayTeam)))){
+     team<-as.character(unique(nhl2015$AwayTeam))[t]
+     team_params[team_params$Team == team,]$Attack=nhl.one.res$par[paste("Attack", team, sep=".")]
+     team_params[team_params$Team == team,]$Defend=nhl.one.res$par[paste("Defence", team, sep=".")]
+}
+
+ggplot(team_params, aes(x=Attack, y=Defence, color=Team)) +
+    ggtitle("Attack vs Defence Parameters") +
+    xlab("Defence") + 
+    ylab("Attack") +
+    geom_point()
+```
 The effect that time dependance has on the Poisson determination is weighting more recent games higher than older results. There are a few reasons why this matters, including the effect of short term hot and cold streaks, but also to account for how teams change over time (player quality changes due to age, players added and removed by trades, drafts, or retirement; changes in coaches or coaching style, etc). To add this to our method from above, we need to start with adding a weighting function based on $\xi$ (xi):
 
 ```{r}
@@ -259,7 +276,7 @@ While it might make sense to use a $\xi$ value of 0.005 (focusing mostly on this
 With the weighting function available, we'll modify the rest of the functions to use the weights:
 
 ```{r}
-DClogLik <- function(y1, y2, lambda, mu, rho=0, weights=NULL){
+DClogLik_w <- function(y1, y2, lambda, mu, rho=0, weights=NULL){
     #rho=0, independence
     #y1 home goals
     #y2 away goals
@@ -271,7 +288,7 @@ DClogLik <- function(y1, y2, lambda, mu, rho=0, weights=NULL){
     }
 }
 
-DCmodelData <- function(df){
+DCmodelData_w <- function(df){
     team.names <- unique(c(levels(df$HomeTeam), levels(df$AwayTeam)))
     
     # attack, with sum-to-zero constraint
@@ -296,7 +313,7 @@ DCmodelData <- function(df){
                 teams=team.names)) 
 }
 
-DCoptimFn <- function(params, DCm, xi=0){
+DCoptimFn_w <- function(params, DCm, xi=0){
     home.p <- params[1]
     rho.p <- params[2]
     
@@ -310,13 +327,13 @@ DCoptimFn <- function(params, DCm, xi=0){
     
     w<-DCweights(DCm$dates, xi=xi)
     return(
-        DClogLik(y1=DCm$homeGoals, y2=DCm$awayGoals, lambda, mu, rho.p, w) * -1
+        DClogLik_w(y1=DCm$homeGoals, y2=DCm$awayGoals, lambda, mu, rho.p, w) * -1
     )
 }
 
-doDCPrediction<-function(df, xi=0){
+doDCPrediction_w<-function(df, xi=0){
     #Get a useful data set
-    dcm<-DCmodelData(df)
+    dcm<-DCmodelData_w(df)
     nteams <- length(dcm$teams)
     
     #dummy fill parameters
@@ -333,7 +350,7 @@ doDCPrediction<-function(df, xi=0){
                           paste('Attack', dcm$teams[1:(nteams-1)], sep='.'),
                           paste('Defence', dcm$teams, sep='.'))
     
-    res <- optim(par=par.inits, fn=DCoptimFn, DCm=dcm, xi=xi, method='Nelder-Mead')
+    res <- optim(par=par.inits, fn=DCoptimFn_w, DCm=dcm, xi=xi, method='BFGS')
     
     parameters <- res$par
     
@@ -359,35 +376,93 @@ Remaking those functions took a lot of space, but only a few lines changed. We m
 
 ```{r xi_all_res, warning=FALSE, cache=TRUE, echo=FALSE, cache.extra=tools::md5sum('../data/leagues_NHL_2016_games_games.csv')}
 t<-proc.time()
-nhl_all_res<-doDCPrediction(nhl_all, xi=0.005)
+nhl_all_res<-doDCPrediction_w(nhl_all, xi=0.005)
 t_all_calc<-proc.time()-t
 ```
 
 ```{r xi_one_res, warning=FALSE, cache=TRUE, echo=FALSE, cache.extra=tools::md5sum('../data/leagues_NHL_2016_games_games.csv')}
 t<-proc.time()
-nhl_one_res<-doDCPrediction(nhl2015, xi=0.005)
+nhl_one_res<-doDCPrediction_w(nhl2015, xi=0.005)
 t_one_calc<-proc.time()-t
 ```
 
-Running it again, we get 10 seasons taking `r as.integer(t_all_calc[3])` seconds, and one season `r as.integer(t_one_calc[3])` seconds. Just a little longer, as we expected.. We could optimize that futher if we wanted (eg. drop data for weight of less than some amount), but fortunately we only have to run this once to start predicting all sorts of results.
+Running it again, we get 10 seasons taking `r as.integer(t_all_calc[3])` seconds, and one season `r as.integer(t_one_calc[3])` seconds. We could optimize that futher if we wanted (eg. drop data for weight of less than some amount), but fortunately we only have to run this once to start predicting all sorts of results.
 
 We'll plot the Attack and Defence parameters for each team to se if there's any correllation.
-```{r attack_defence_corr_plot, cache=TRUE, echo=FALSE, cache.extra=tools::md5sum('../data/leagues_NHL_2016_games_games.csv')}
+```{r xi_attack_defence_corr_plot, cache=TRUE, echo=FALSE, cache.extra=tools::md5sum('../data/leagues_NHL_2016_games_games.csv')}
+library(ggplot2)
 team_params<-data.frame("Team"=unique(nhl2015$AwayTeam), "Attack"=0, "Defence"=0)
 for (t in 1:length(as.character(unique(nhl2015$AwayTeam)))){
      team<-as.character(unique(nhl2015$AwayTeam))[t]
-     team_params[team_params$Team == team,]$Attack=nhl_one_res$par[paste("Attack", team, sep=".")]
-     team_params[team_params$Team == team,]$Defend=nhl_one_res$par[paste("Defence", team, sep=".")]
+     team_params[team_params$Team == team,]$Attack=nhl.one.res$par[paste("Attack", team, sep=".")]
+     team_params[team_params$Team == team,]$Defend=nhl.one.res$par[paste("Defence", team, sep=".")]
 }
 
 ggplot(team_params, aes(x=Attack, y=Defence, color=Team)) +
     ggtitle("Attack vs Defence Parameters") +
     xlab("Defence") + 
     ylab("Attack") +
-    geom_point() +
-    geom_smooth(method="lm")
+    geom_point()
 ```
 
-Next time we'll run them and predict some games!
+```{r}
+library(knitr)
+kable(team_params)
+```
 
+There's another way of generating the teams strengths, and this is wicked fast. Again, this is based on opisthokonta and from Martin Eastwood and the [pena.lt/y](pena.lt/y blog) blog. This method is slightly lsess accurate, and doesn't do time dependance (yet) but is fast enough and simple enough to cut it. 
 
+I'll write it out here in a fully implemeneted function, but in essance, a linear fit of Goals as predicted by the combination of Home (for any given game), Team (whichever team we focus on) and Away (for any given game). This gives us back a list of parameters in the form of a 'Home' strength, and Team[nhlteam] and Opponent[nhlteam] strengths. Those are fed back into the 'fitted' function which provides us with the expected goals for each game, provided as a list of home goals followed by away goals. When those are compared to the actual goals in the `DCoptimRhoFn`, we get a value for rho, the low-scoring enhancer. Lambda and mu are extracted using the predict function. The remainder of the score prediction code we have works the same from this point on, but I've included some of it to get a prediction value out.
+
+```{r fast_code}
+doFastFit<-function(df){
+    df.indep <- data.frame(Team=as.factor(c(as.character(df$HomeTeam),
+                                            as.character(df$AwayTeam))),
+                           Opponent=as.factor(c(as.character(df$AwayTeam),
+                                                as.character(df$HomeTeam))),
+                           Goals=c(df$HG, df$AG),
+                           Home=c(rep(1, dim(df)[1]), rep(0, dim(df)[1])))
+    m <- glm(Goals ~ Home + Team + Opponent, data=df.indep, family=poisson())
+    return(m)
+}
+
+doFastDC<-function(m, df){
+    expected <- fitted(m)
+    home.expected <- expected[1:nrow(df)]
+    away.expected <- expected[(nrow(df)+1):(nrow(df)*2)]
+    
+    DCoptimRhoFn.fast <- function(par){
+        rho <- par[1]
+        DClogLik(df$HG, df$AG, home.expected, away.expected, rho)
+    }
+    
+    res <- optim(par=c(0.1), fn=DCoptimRhoFn.fast, control=list(fnscale=-1), method='BFGS')
+    return(res)
+}
+
+fastDCPredict<-function(m,res,home,away,maxgoal=7){
+    # Expected goals home
+    lambda <- predict(m, data.frame(Home=1, Team=home, Opponent=away), type='response')
+    
+    # Expected goals away
+    mu <- predict(m, data.frame(Home=0, Team=away, Opponent=home), type='response')
+    
+    probability_matrix <- dpois(0:maxgoal, lambda) %*% t(dpois(0:maxgoal, mu))
+    
+    scaling_matrix <- matrix(tau(c(0,1,0,1), c(0,0,1,1), lambda, mu, res$par), nrow=2)
+    probability_matrix[1:2, 1:2] <- probability_matrix[1:2, 1:2] * scaling_matrix
+    
+    HomeWinProbability <- sum(probability_matrix[lower.tri(probability_matrix)])
+    DrawProbability <- sum(diag(probability_matrix))
+    AwayWinProbability <- sum(probability_matrix[upper.tri(probability_matrix)])
+    
+    return(c(HomeWinProbability,DrawProbability,AwayWinProbability))
+}
+
+t<-proc.time()
+mAll<-doFastFit(nhl_all)
+resAll<-doFastDC(mAll, nhl_all)
+tFast<-proc.time()-t
+```
+
+So, for all the data, that provides us with a fitting in `r as.integer(tFast[3])` seconds, compared to `r as.integer(t_all_calc[3])` seconds for the above method. We'll continue to use this method for speed in later work as we predict results for some games!
